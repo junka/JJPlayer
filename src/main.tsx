@@ -1,0 +1,50 @@
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import './index.scss'
+import { ipcRenderer } from "electron"
+
+
+const video = document.getElementById('player') as HTMLVideoElement
+
+ipcRenderer.on('file-selected', (event, {path}) => {
+  const playpath = "play://" + path
+  if (video.src !== encodeURI(playpath)) {
+    video.src = encodeURI(playpath)
+    const trackNodeList = document.getElementsByTagName("track")
+    for (let node of trackNodeList) {
+      video.removeChild(node)
+    }
+  }
+})
+
+ipcRenderer.on('subtitle-open', (event, {path}) => {
+  const vttpath = encodeURI("play://" + path)
+  const node = document.createElement("track")
+  node.setAttribute("default", "on")
+  node.setAttribute("kind", "captions")
+  node.setAttribute("src", vttpath)
+  video.appendChild(node)
+})
+
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+  <React.StrictMode>
+  </React.StrictMode>,
+)
+
+
+
+// const pipButton = document.createElement('button');
+// pipButton.textContent = 'PiP';
+// pipButton.addEventListener('click', async () => {
+//   try {
+//     if (video !== document.pictureInPictureElement) {
+//       await video.requestPictureInPicture();
+//     } else {
+//       await document.exitPictureInPicture();
+//     }
+//   } catch (error) {
+//     // Error handling
+//   }
+// });
+
+postMessage({ payload: 'removeLoading' }, '*')
