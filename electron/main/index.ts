@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, dialog, protocol, Menu} from 'electron'
+import { app, BrowserWindow, nativeImage, ipcMain, dialog, protocol, Menu, Tray} from 'electron'
 import { release } from 'node:os'
 import { join, basename } from 'node:path'
 import { update } from './update'
@@ -88,6 +88,16 @@ app.on('ready', async () => {
   i18n.active()
   const menu = Menu.buildFromTemplate(getTemplate())
   Menu.setApplicationMenu(menu)
+
+  const icon = nativeImage.createFromPath(join(process.env.PUBLIC, 'tray.png'))
+  const tray = new Tray(icon)
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Play', type: 'normal', click: () => {win?.webContents.send('play-action', 1)} },
+    { label: 'Pause', type: 'normal', click: () => {win?.webContents.send('play-action', 0)} },
+    { label: i18n.__('Quit'), role: 'quit', type: 'normal'}
+  ])
+  tray.setContextMenu(contextMenu)
+  tray.setToolTip('JJPlayer')
 })
 
 
@@ -150,8 +160,5 @@ ipcMain.on('show-error-box', (event, arg) => {
 
 
 ipcMain.on('play-progress', (event, progress) => {
-  console.log(progress)
   win?.setProgressBar(progress)
 })
-
-// Change theme

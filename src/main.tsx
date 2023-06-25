@@ -13,8 +13,17 @@ video.addEventListener("timeupdate", (event) => {
   const per = Math.floor(100 * video.currentTime / video.duration)
   if (!isNaN(video.duration) && !isNaN(per) && (per === 100 || per - progressv >= 1 || per < progressv)) {
     progressv = per
-    console.log(" progress", per / 100)
     ipcRenderer.send("play-progress", per/100)
+  }
+})
+
+ipcRenderer.on('play-action', (event, action) => {
+  if (video.src !== '') {
+    if (action === 1) {
+      video.play()
+    } else {
+      video.pause()
+    }
   }
 })
 

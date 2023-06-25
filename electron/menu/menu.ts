@@ -1,4 +1,4 @@
-import { Menu, dialog, shell, nativeTheme, app, ipcRenderer, MenuItemConstructorOptions, MenuItem } from 'electron'
+import { dialog, shell, nativeTheme, app, MenuItemConstructorOptions, MenuItem } from 'electron'
 import { update } from '../main/update'
 import { basename } from 'node:path'
 import { i18n } from '../i18n/i18n'
@@ -94,6 +94,7 @@ export const getTemplate = (): Array<MenuItemConstructorOptions | MenuItem> => {
                 },
                 {
                     label: i18n.__('Close'),
+                    role: 'close',
                     click: () => {
                         win?.close()
                     },
@@ -103,6 +104,7 @@ export const getTemplate = (): Array<MenuItemConstructorOptions | MenuItem> => {
         },
         {
             label: i18n.__('Window'),
+            role: 'window',
             submenu: [
                 {
                     label: i18n.__('Maximize'),
