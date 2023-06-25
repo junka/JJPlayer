@@ -15,7 +15,7 @@ function show_about_dialog() {
     })
 }
 
-function show_open_dialog() {
+export function show_open_dialog() {
     dialog.showOpenDialog({
         title: i18n.__('Open'),
         defaultPath: '~/Downloads',

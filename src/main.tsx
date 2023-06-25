@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client'
 import './index.scss'
 import { ipcRenderer } from "electron"
 
-
 const video = document.getElementById('player') as HTMLVideoElement
 
 let progressv = -1
@@ -47,25 +46,13 @@ ipcRenderer.on('subtitle-open', (event, {path}) => {
   video.appendChild(node)
 })
 
+window.addEventListener('contextmenu', () => {
+  ipcRenderer.invoke('show-context-menu')
+})
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
   </React.StrictMode>,
 )
-
-
-
-// const pipButton = document.createElement('button');
-// pipButton.textContent = 'PiP';
-// pipButton.addEventListener('click', async () => {
-//   try {
-//     if (video !== document.pictureInPictureElement) {
-//       await video.requestPictureInPicture();
-//     } else {
-//       await document.exitPictureInPicture();
-//     }
-//   } catch (error) {
-//     // Error handling
-//   }
-// });
 
 postMessage({ payload: 'removeLoading' }, '*')

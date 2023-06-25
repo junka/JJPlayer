@@ -2,7 +2,7 @@ import { app, BrowserWindow, nativeImage, ipcMain, dialog, protocol, Menu, Tray}
 import { release } from 'node:os'
 import { join, basename } from 'node:path'
 import { update } from './update'
-import { getTemplate } from '../menu/menu'
+import { getTemplate, show_open_dialog } from '../menu/menu'
 import { i18n } from '../i18n/i18n'
 
 process.env.DIST_ELECTRON = join(__dirname, '../')
@@ -153,6 +153,18 @@ ipcMain.handle('open-win', (_, arg) => {
   }
 })
 
+ipcMain.handle('show-context-menu', () => {
+  const menu = Menu.buildFromTemplate(
+    [
+      { label: "Play", type: 'normal', click: () => { win?.webContents.send('play-action', 1) } },
+      { label: "Pause", click: () => { win?.webContents.send('play-action', 0) } },
+      { type: "separator"},
+      { label: 'Open', click: () => { show_open_dialog() }},
+      { role: 'close'},
+    ]
+  )
+  menu.popup();
+})
 
 ipcMain.on('show-error-box', (event, arg) => {
   dialog.showErrorBox('Oops! Something went wrong!', 'Help us improve your experience by sending an error report')
