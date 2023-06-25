@@ -6,6 +6,18 @@ import { ipcRenderer } from "electron"
 
 const video = document.getElementById('player') as HTMLVideoElement
 
+let progressv = -1
+
+video.addEventListener("timeupdate", (event) => {
+
+  const per = Math.floor(100 * video.currentTime / video.duration)
+  if (!isNaN(video.duration) && !isNaN(per) && (per === 100 || per - progressv >= 1 || per < progressv)) {
+    progressv = per
+    console.log(" progress", per / 100)
+    ipcRenderer.send("play-progress", per/100)
+  }
+})
+
 ipcRenderer.on('file-selected', (event, {path}) => {
   const playpath = "play://" + path
   if (video.src !== encodeURI(playpath)) {

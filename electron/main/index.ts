@@ -148,4 +148,10 @@ ipcMain.on('show-error-box', (event, arg) => {
   dialog.showErrorBox('Oops! Something went wrong!', 'Help us improve your experience by sending an error report')
 });
 
+
+ipcMain.on('play-progress', (event, progress) => {
+  console.log(progress)
+  win?.setProgressBar(progress)
+})
+
 // Change theme
