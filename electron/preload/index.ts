@@ -1,4 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron')
+const path = require('path')
 
 function domReady(condition: DocumentReadyState[] = ['complete', 'interactive']) {
   return new Promise(resolve => {
@@ -92,3 +93,9 @@ window.onmessage = (ev) => {
 }
 
 setTimeout(removeLoading, 4999)
+
+// contextBridge.exposeInMainWorld('electron', {
+//   startDrag: (fileName: string) => {
+//     ipcRenderer.send('ondragstart', path.join(process.cwd(), fileName))
+//   }
+// })

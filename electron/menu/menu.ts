@@ -20,7 +20,7 @@ export function show_open_dialog() {
         title: i18n.__('Open'),
         defaultPath: '~/Downloads',
         filters: [
-            { name: 'Media Files', extensions: ['mkv', 'mp4', 'ogg', 'webm', 'wav'] },
+            { name: 'Media Files', extensions: ['mkv', 'mp4', 'ogg', 'webm', 'wav', 'ts', 'mov', 'mp3'] },
         ],
         properties: ['openFile'],
     }).then(result => {

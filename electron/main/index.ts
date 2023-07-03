@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeImage, ipcMain, dialog, protocol, Menu, Tray} from 'electron'
+import { app, BrowserWindow, nativeImage, ipcMain, dialog, protocol, Menu, MenuItemConstructorOptions, Tray} from 'electron'
 import { release } from 'node:os'
 import { join, basename } from 'node:path'
 import { update } from './update'
@@ -32,6 +32,8 @@ export let win: BrowserWindow | null = null
 const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
 const indexHtml = join(process.env.DIST, 'index.html')
+
+let playstatus = 0
 
 async function createWindow() {
 
@@ -70,16 +72,17 @@ async function createWindow() {
   update(win)
 }
 
-// protocol.registerSchemesAsPrivileged([
-//   {
-//     scheme: 'play', 
-//     privileges: { 
-//       standard: true,
-//       secure: true,
-//       bypassCSP: true,
-//       allowServiceWorkers: true
-//     }}
-// ])
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'play', 
+    privileges: { 
+      standard: true,
+      secure: true,
+      bypassCSP: true,
+      allowServiceWorkers: true
+    }}
+])
+
 app.on('ready', async () => {
   protocol.registerFileProtocol('play', (request, callback) => {
     const url = request.url.substr(7)
@@ -91,11 +94,23 @@ app.on('ready', async () => {
 
   const icon = nativeImage.createFromPath(join(process.env.PUBLIC, 'tray.png'))
   const tray = new Tray(icon)
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Play', type: 'normal', click: () => {win?.webContents.send('play-action', 1)} },
-    { label: 'Pause', type: 'normal', click: () => {win?.webContents.send('play-action', 0)} },
-    { label: i18n.__('Quit'), role: 'quit', type: 'normal'}
-  ])
+  const menutemplate: MenuItemConstructorOptions[] = [
+    { label: 'Play', type: 'normal'},
+    { label: i18n.__('Quit'), role: 'quit', type: 'normal' }
+  ]
+  menutemplate[0].click = () => {
+    if (playstatus == 0) {
+      menutemplate[0].label = 'Pause'
+      win?.webContents.send('play-action', 1)
+    } else {
+      menutemplate[0].label = 'Play'
+      win?.webContents.send('play-action', 0)
+    }
+    const contextMenu = Menu.buildFromTemplate(menutemplate as MenuItemConstructorOptions[])
+    tray.setContextMenu(contextMenu)
+  }
+
+  const contextMenu = Menu.buildFromTemplate(menutemplate as MenuItemConstructorOptions[])
   tray.setContextMenu(contextMenu)
   tray.setToolTip('JJPlayer')
 })
@@ -154,15 +169,25 @@ ipcMain.handle('open-win', (_, arg) => {
 })
 
 ipcMain.handle('show-context-menu', () => {
-  const menu = Menu.buildFromTemplate(
-    [
-      { label: "Play", type: 'normal', click: () => { win?.webContents.send('play-action', 1) } },
-      { label: "Pause", click: () => { win?.webContents.send('play-action', 0) } },
+  const menutemplate = [
+      { label: "Play", type: 'normal'},
       { type: "separator"},
       { label: 'Open', click: () => { show_open_dialog() }},
       { role: 'close'},
     ]
-  )
+  if (playstatus == 0) {
+    menutemplate[0].label = 'Play'
+  } else {
+    menutemplate[0].label = 'Pause'
+  }
+  menutemplate[0].click = () => {
+    if (playstatus === 0) {
+      win?.webContents.send('play-action', 1)
+    } else {
+      win?.webContents.send('play-action', 0)
+    }
+  }
+  const menu = Menu.buildFromTemplate(menutemplate as MenuItemConstructorOptions[])
   menu.popup();
 })
 
@@ -173,4 +198,8 @@ ipcMain.on('show-error-box', (event, arg) => {
 
 ipcMain.on('play-progress', (event, progress) => {
   win?.setProgressBar(progress)
+})
+
+ipcMain.on('play-status', (e, value) => {
+  playstatus = value
 })
