@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeImage, ipcMain, dialog, protocol, Menu, MenuItemConstructorOptions, Tray} from 'electron'
+import { app, session, BrowserWindow, nativeImage, ipcMain, dialog, protocol, Menu, MenuItemConstructorOptions, Tray} from 'electron'
 import { release } from 'node:os'
 import { join, basename } from 'node:path'
 import { update } from './update'
@@ -10,6 +10,7 @@ process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
 process.env.PUBLIC = process.env.VITE_DEV_SERVER_URL
   ? join(process.env.DIST_ELECTRON, '../public')
   : process.env.DIST
+process.env.JS_FLAGS = "--experimental-wasm-threads --experimental-wasm-bulk-memory"
 
 // Disable GPU Acceleration for Windows 7
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -48,6 +49,7 @@ async function createWindow() {
       // Consider using contextBridge.exposeInMainWorld
       // Read more on https://www.electronjs.org/docs/latest/tutorial/context-isolation
       nodeIntegration: true,
+      nodeIntegrationInWorker: true,
       contextIsolation: false,
       webSecurity: true,
       // https://www.electronjs.org/zh/docs/latest/tutorial/offscreen-rendering
@@ -84,6 +86,13 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 app.on('ready', async () => {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = details.responseHeaders as Record<string, string[]>;
+    responseHeaders['Cross-Origin-Opener-Policy'] = ['same-origin'];
+    responseHeaders['Cross-Origin-Embedder-Policy'] = ['require-corp'];
+    callback({ cancel: false, responseHeaders });
+  });
+  
   protocol.registerFileProtocol('play', (request, callback) => {
     const url = request.url.substr(7)
     callback(decodeURI(url));
@@ -115,10 +124,10 @@ app.on('ready', async () => {
   tray.setToolTip('JJPlayer')
 })
 
-
-// app.setName('JJPlayer')
-
 app.commandLine.appendSwitch('lang', 'eng')
+// app.commandLine.appendSwitch("enable-webassembly")
+// app.commandLine.appendSwitch('js-flags', '--harmony_proxies --experimental-wasm-threads --experimental-wasm-bulk-memory')
+// --experimental-wasm-bulk-memory
 
 app.whenReady().then(createWindow)
 

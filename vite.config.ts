@@ -74,5 +74,6 @@ export default defineConfig(({ command }) => {
       }
     })(),
     clearScreen: false,
+    nodeArgs: process.env.JS_FLAGS
   }
 })

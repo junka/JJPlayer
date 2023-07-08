@@ -3,9 +3,9 @@
     "target": "ESNext",
     "useDefineForClassFields": true,
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "allowJs": false,
+    "allowJs": true,
     "skipLibCheck": true,
-    "esModuleInterop": false,
+    "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
@@ -18,10 +18,11 @@
     "baseUrl": "./",
     "paths": {
       "@/*": [
-        "src/*"
+        "src/*",
+        "src/wasm/*"
       ]
     },
   },
-  "include": ["src", "electron"],
+  "include": [ "src", "electron" ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

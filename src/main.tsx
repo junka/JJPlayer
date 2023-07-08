@@ -3,10 +3,57 @@ import App from './App'
 import videojs from 'video.js'
 import { ipcRenderer } from "electron"
 import * as fs from 'node:fs'
-import muxjs from 'mux.js'
+import {getMimeTypes} from './mime'
+import {SharedBufferWorkletNode} from './audioworker-node'
+
+
+import {Module} from "./wasm/main"
+
+// import muxjs from 'mux.js'
 
 declare type Player = ReturnType<typeof videojs>
 
+
+const whisper = Module
+const modname = 'whisper.bin'
+let wins : any = null
+whisper.onRuntimeInitialized = () => {
+  const data = fs.readFileSync(process.env.PUBLIC+"/ggml-tiny.bin")
+  try {
+    whisper.FS_unlink(modname)
+  } catch(e) {
+    console.log("read model file err ", e)
+  }
+  whisper.FS_createDataFile("/", modname, data, true, true)
+  console.log("store to wasm fs")
+
+  wins = whisper.init(modname)
+  if (wins) {
+    console.log("init whisper success")
+  } else {
+    console.log("init whisper failed ")
+  }
+}
+
+if (!navigator.storage || !navigator.storage.estimate) {
+  console.log('navigator is not support')
+} else {
+  navigator.storage.estimate().then((est) => {
+    console.log("navigator bytes", est.quota, est.usage)
+  })
+}
+
+function transASR(audio: Float32Array, tranlate: Boolean) {
+  const ret = whisper.full_default(wins, audio, 'en', 8, tranlate)
+  console.log(ret)
+}
+
+
+declare global {
+  interface Window {
+    HELP_IMPROVE_VIDEOJS: boolean;
+  }
+}
 
 window.HELP_IMPROVE_VIDEOJS = false
 
@@ -14,9 +61,12 @@ interface playConfig {
   video: Player | null;
   tracks: HTMLTrackElement[];
   progressv: number
+  mediasrc: MediaSource
+  audioContext: AudioContext
+  // sbwn : SharedBufferWorkletNode | null
 }
 
-const usefile = "/Users/admin/proj/github/mmp/mpp/oceans.mp4"
+const usefile = "/Users/admin/proj/github/mmp/mpp/jfk.wav"
 const videoOptions = {
     html5: { nativeAudioTracks: false },
     responsive: true,
@@ -33,12 +83,15 @@ let player: playConfig = {
   video : null,
   tracks : [],
   progressv : -1,
+  mediasrc : new MediaSource(),
+  audioContext : new AudioContext(),
+  // sbwn: null
 }
 
-
-const handlePlayerReady = (rplayer: Player) => {
+const onPlayerReady = (rplayer: Player) => {
   player.video = rplayer
-  videojs.log('player is ready');
+  videojs.log('player is ready', rplayer);
+  rplayer.src({ type: 'video/mp4', src: URL.createObjectURL(player.mediasrc)})
 
   rplayer.on('waiting', () => {
     videojs.log('player is waiting');
@@ -74,8 +127,6 @@ const handlePlayerReady = (rplayer: Player) => {
 
 const accelerations = ["prefer-hardware", "prefer-software"];
 
-// video = document.getElementById('')
-
 // if ('VideoDecoder' in window) {
 //   console.log("WebCodec supported")
 // }
@@ -92,13 +143,13 @@ async function renderFrame() {
 }
 
 
-function handleFrame(frame: VideoFrame) {
-  readyFrames.push(frame);
-  if (underflow) {
-    underflow = false;
-    setTimeout(renderFrame, 0);
-  }
-}
+// function handleFrame(frame: VideoFrame) {
+//   readyFrames.push(frame);
+//   if (underflow) {
+//     underflow = false;
+//     setTimeout(renderFrame, 0);
+//   }
+// }
 
 async function checkSupportedCodec(codec: string) {
   for (const acceleration of accelerations) {
@@ -116,47 +167,9 @@ async function checkSupportedCodec(codec: string) {
   }
   return false
 }
-// const decoder = new VideoDecoder({
-//   output: handleFrame,
-//   error: (e) => {
-//     console.log(e.message);
-//   },
-// });{}''
-// decoder.configure(config);
 
-// decoder.decode()
+// var transmuxer = new muxjs.mp4.Transmuxer();
 
-var transmuxer = new muxjs.mp4.Transmuxer();
-
-// navigator.mediaDevices.getUserMedia({audio: false, video: false})
-
-const audioContext = new AudioContext();
-// const audioBuffer = audioContext.createBufferSource()
-// audioBuffer.connect(audioContext.destination)
-// const audioSrc = audioContext.createMediaElementSource(video)
-
-const offlineCtx = new OfflineAudioContext(2, 44100 * 40, 44100);
-
-// const audioBuffer = offlineCtx.createBufferSource();
-
-offlineCtx.addEventListener("complete", (e) => {
-  const song = new AudioBufferSourceNode(audioContext, { buffer: e.renderedBuffer })
-  song.connect(audioContext.destination)
-  song.start()
-  console.log("offline audio render complete", song)
-})
-
-function getOfflineAudio(decodebuffer: AudioBuffer) {
-  const audioBuffer = new AudioBufferSourceNode(offlineCtx, {
-    buffer: decodebuffer,
-  });
-  audioBuffer.connect(offlineCtx.destination)
-  audioBuffer.start()
-  offlineCtx.startRendering()
-}
-
-
-// const audioSource = audioContext.createMediaStreamSource(stream);
 
 // volume control
 // const audioGain = audioContext.createGain();
@@ -164,15 +177,15 @@ function getOfflineAudio(decodebuffer: AudioBuffer) {
 // audioGain.connect(audioContext.destination)
 
 // for mp2t to mp4
-transmuxer.on('done', () => {
-  console.log("transmux done")
-})
+// transmuxer.on('done', () => {
+//   console.log("transmux done")
+// })
 
-transmuxer.on('data', (segment: any) => {
-  console.log("data fragment mp4 ready", segment)
-  let data = new Uint8Array(segment.initSegment.byteLenth + segment.data.byteLenth)
-  data.set(segment.initSegment, 0)
-})
+// transmuxer.on('data', (segment: any) => {
+//   console.log("data fragment mp4 ready", segment)
+//   let data = new Uint8Array(segment.initSegment.byteLenth + segment.data.byteLenth)
+//   data.set(segment.initSegment, 0)
+// })
 
 ipcRenderer.on('play-action', (event, action) => {
     if (action === 1) {
@@ -183,105 +196,160 @@ ipcRenderer.on('play-action', (event, action) => {
 })
 
 
-const mediasrc = new MediaSource()
-// video?.src = URL.createObjectURL(mediasrc)
-
-mediasrc.addEventListener('error', (e) => {
+player.mediasrc.addEventListener('error', (e) => {
   console.log("media source error", e)
 })
 
-function getMimeCodec(type: string, bytes: Buffer) {
-  var probed;
-  var parse;
-  if (type === 'mp4') {
-    probed = muxjs.mp4.probe.tracks(bytes)
-    parse = muxjs.mp4.tools.inspect(bytes)
-  } else {
-    probed = muxjs.mp2t
-    console.log(probed)
-    parse = muxjs.mp2t.tools.inspect(bytes)
-    console.log(parse)
-  }
-  var isFragmented = false
-  for (var i = 0; i < parse.length; i++) {
-    if (parse[i].type === 'moof') {
-      isFragmented = true
-      break
-    }
-  }
-  for (var i = 0; i < probed.length; i++) {
-    if (probed[i].type === 'video') {
-      checkSupportedCodec(probed[i].codec)
-    }
-  }
-  const mimeCodec = "video/" + type + "; codecs=" + probed.map((t: any) => t.codec).join(",");
-  // const moofBoxIndex = bytes.indexOf('moof');
-  // const isFragmented = moofBoxIndex !== -1;
-  return { mimeCodec, isFragmented }
-}
+// function getMimeCodec(type: string, bytes: Buffer) {
+//   var probed;
+//   var parse;
+//   if (type === 'mp4') {
+//     probed = muxjs.mp4.probe.tracks(bytes)
+//     parse = muxjs.mp4.tools.inspect(bytes)
+//   } else {
+//     probed = muxjs.mp2t
+//     console.log(probed)
+//     parse = muxjs.mp2t.tools.inspect(bytes)
+//     console.log(parse)
+//   }
+//   var isFragmented = false
+//   for (var i = 0; i < parse.length; i++) {
+//     if (parse[i].type === 'moof') {
+//       isFragmented = true
+//       break
+//     }
+//   }
+//   for (var i = 0; i < probed.length; i++) {
+//     if (probed[i].type === 'video') {
+//       checkSupportedCodec(probed[i].codec)
+//     }
+//   }
+//   const mimeCodec = "video/" + type + "; codecs=" + probed.map((t: any) => t.codec).join(",");
+//   // const moofBoxIndex = bytes.indexOf('moof');
+//   // const isFragmented = moofBoxIndex !== -1;
+//   return { mimeCodec, isFragmented }
+// }
 
-mediasrc.addEventListener('sourceopen', (evt) => {
-  const bytes = fs.readFileSync(usefile)
+player.mediasrc.addEventListener('sourceopen', (evt) => {
+  // const bytes = fs.readFileSync(usefile)
   console.log("source open", evt)
-  const { mimeCodec, isFragmented } = getMimeCodec('mp4', bytes)
-  // const mimeCodec = 'video/mp4; codecs="avc1.64001f,mp4a.40.2"';
-  // const isFragmented = false
+  // const { mimeCodec, isFragmented } = getMimeCodec('mp4', bytes)
+  // const mimeCodec = 'video/mp4; codecs="avc1.42c01e,mp4a.40.2"';
+  // const mimeCodec = 'video/mp4; codecs="avc1.4d4016,mp4a.40.2"'
+  const mimeCodec = getMimeTypes(usefile)
+  if (mimeCodec.startsWith('audio')) {
+    player.video?.disablePictureInPicture(true)
+  }
+  const isFragmented = false
   console.log(mimeCodec)
   if (!MediaSource.isTypeSupported(mimeCodec)) {
     console.log("not support for ", mimeCodec)
-    throw new Error("MSE does not support: " + mimeCodec);
-  }
+    
+    function decodeCustomMedia(buffer: ArrayBuffer) {
 
-  const srcbuf = mediasrc.addSourceBuffer(mimeCodec)
+      const audioSrc = player.audioContext.createBufferSource();
+      player.audioContext.decodeAudioData(buffer, (ab) => {
 
-  srcbuf.addEventListener('error', (e) => {
-    console.log('source buffer err', e)
-  })
+        // const offlineCtx = new OfflineAudioContext({
+        //   numberOfChannels: ab.numberOfChannels,
+        //   length: ab.length,
+        //   sampleRate: ab.sampleRate,
+        // })
 
-  srcbuf.addEventListener('updateend', () => {
-    console.log("update end: media src ready state", srcbuf.updating, mediasrc.readyState);
-    if (!srcbuf.updating && mediasrc.readyState === 'open') {
-      mediasrc.endOfStream()
-    }
-  })
+        player.audioContext.audioWorklet.addModule(new URL('./audioworker-processor.ts', import.meta.url)).then(() => {
+          console.log('audio worker module added')
+          const sb = new SharedBufferWorkletNode(player.audioContext)
+          sb.onInitialized = () => {
+            console.log("sb inited")
 
-  srcbuf.addEventListener('update', (e: any) => {
-    console.log("update", e)
-  })
+            audioSrc.buffer = ab
+            sb.connect(player.audioContext.destination)
+            audioSrc.connect(sb)
+            audioSrc.start(0)
+          }
 
-  // signal when a new Fmp4 segment is ready
-  // transmuxer.on('data', (segment: any) => {
-  //   console.log("data fragment mp4 ready", segment)
-  //   let data = new Uint8Array(segment.initSegment.byteLenth + segment.data.byteLenth)
-  //   data.set(segment.initSegment, 0)
-  //   data.set(segment.data, segment.initSegment.byteLenth)
-  //   // console.log(muxjs.mp4.tools.inspect(data));
-  //   srcbuf.appendBuffer(data)
-  // })
-
-  fetchAB('play://' + usefile, (buffer: ArrayBuffer) => {
-    if (isFragmented === true) {
-      srcbuf.appendBuffer(buffer)
-      audioContext.decodeAudioData(buffer, getOfflineAudio)
-    } else {
-      console.log("push to transmux", buffer)
-      // transmuxer.push(new Uint8Array(buffer))
-      // transmuxer.flush()
-      audioContext.decodeAudioData(buffer,
-        (buf) => {
-          const max = Math.floor(buf.duration)
-        },
-        (err) => {
-          console.log("unable to get audio file", err)
+          sb.onError = () => {
+            console.log("sb error")
+          }
         })
 
+        // offlineCtx.oncomplete = (e) => {
+        //   console.log("offline audio render complete", e)
+        // }
+
+        // offlineCtx.startRendering().then((rbuf:AudioBuffer) => {
+        //   console.log("start11 rendering", rbuf)
+        //   var audio = rbuf.getChannelData(0)
+        //   console.log("rbuf size", rbuf.length)
+        //   console.log("audio loaded, size: ", audio.length)
+        //   setTimeout( () => {transASR(audio, false)}, 100)
+        // })
+
+      }, (err) => {
+        console.log("unable to get audio file", err)
+      })
     }
-  })
+
+    fetchAB('play://' + usefile, decodeCustomMedia)
+    // player.audioContext.resume()
+
+  } else {
+    // for those mediasource supported format
+    const srcbuf = player.mediasrc.addSourceBuffer(mimeCodec)
+    srcbuf.onerror = (e) => {
+      console.log('source buffer err', e)
+    }
+
+    srcbuf.onupdate = (e: any) => {
+      console.log("update", e)
+    }
+
+    srcbuf.onupdateend = () => {
+      console.log("update end: media src ready state", srcbuf.updating, player.mediasrc.readyState);
+      if (!srcbuf.updating && player.mediasrc.readyState === 'open') {
+        player.mediasrc.endOfStream()
+      }
+    }
+
+    function decodeForMedaiSrc(buffer: ArrayBuffer) {
+      srcbuf.appendBuffer(buffer)
+      player.audioContext.decodeAudioData(buffer, (ab) => {
+
+        const offlineCtx = new OfflineAudioContext({
+          numberOfChannels: ab.numberOfChannels,
+          length: ab.length,
+          sampleRate: ab.sampleRate,
+        })
+
+        offlineCtx.oncomplete = (e) => {
+          // const song = new AudioBufferSourceNode(player.audioContext, { buffer: e.renderedBuffer })
+          // song.connect(player.audioContext.destination)
+          // song.start()
+          console.log("offline audio render complete", e)
+        }
+
+        const audioSrc = offlineCtx.createBufferSource();
+        audioSrc.buffer = ab
+        audioSrc.connect(offlineCtx.destination)
+        audioSrc.start(0)
+        offlineCtx.startRendering().then((rbuf:AudioBuffer) => {
+          console.log("start rendering", rbuf)
+          var audio = rbuf.getChannelData(0)
+          console.log("rbuf size", rbuf.length)
+          console.log("audio loaded, size: ", audio.length)
+          setTimeout( () => {transASR(audio, false)}, 100)
+        })
+      }, (err) => {
+        console.log("unable to get audio file", err)
+      })
+    }
+    fetchAB('play://' + usefile, decodeForMedaiSrc)
+  }
 })
 
-mediasrc.addEventListener('sourceended', () => {
-  console.log("source ended", mediasrc.readyState)
-})
+player.mediasrc.onsourceended = () => {
+  console.log("source ended", player.mediasrc.readyState)
+}
 
 function fetchAB(url: string, callback: Function) {
   var xhr = new XMLHttpRequest;
@@ -327,7 +395,7 @@ window.addEventListener('contextmenu', () => {
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <div>
-    <App options={videoOptions} onReady={handlePlayerReady}/>
+    <App options={videoOptions} onReady={onPlayerReady}/>
   </div>
 )
 

@@ -1,6 +1,6 @@
 {
   "name": "jjplayer",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "dist-electron/main/index.js",
   "description": "Multi media player",
   "author": "junka <wan.junjie@foxmail.com>",
@@ -21,7 +21,7 @@
   "dependencies": {
     "@types/dom-webcodecs": "^0.1.7",
     "@types/videojs": "^5.16.2",
-    "audiobuffer-to-wav": "^1.0.0",
+    "@videojs/http-streaming": "^2.16.2",
     "electron-updater": "^5.3.0",
     "mpd-parser": "^1.1.1",
     "mux.js": "^6.3.0",
@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.32.0",
+    "@types/audioworklet": "0.0.48",
     "@types/react": "^18.0.28",
     "@types/react-dom": "^18.0.11",
     "@vitejs/plugin-react": "^3.1.0",
