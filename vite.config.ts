@@ -61,6 +61,32 @@ export default defineConfig(({ command }) => {
               },
             },
           },
+        }, 
+        {
+          entry: 'electron/whisper/libwhisper.worker.js',
+          vite: {
+            build: {
+              sourcemap,
+              minify: isBuild,
+              outDir: 'dist-electron/main',
+              rollupOptions: {
+                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
+              },
+            },
+          },
+        },
+        {
+          entry: 'electron/whisper/whisper.js',
+          vite: {
+            build: {
+              sourcemap,
+              minify: isBuild,
+              outDir: 'dist-electron/main',
+              rollupOptions: {
+                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
+              },
+            },
+          },
         }
       ]),
       // Use Node.js API in the Renderer-process

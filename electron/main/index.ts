@@ -2,8 +2,10 @@ import { app, session, BrowserWindow, nativeImage, ipcMain, dialog, protocol, Me
 import { release } from 'node:os'
 import { join, basename } from 'node:path'
 import { update } from './update'
-import { getTemplate, show_open_dialog } from '../menu/menu'
+import { getTemplate, show_open_dialog, gwhisper, whisperInit} from '../menu/menu'
 import { i18n } from '../i18n/i18n'
+import * as fs from 'node:fs'
+import { getMimeTypes } from '../../src/mime'
 
 process.env.DIST_ELECTRON = join(__dirname, '../')
 process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
@@ -58,7 +60,7 @@ async function createWindow() {
   })
 
   if (url) { // electron-vite-vue#298
-    win.loadURL(url)
+    await win.loadURL(url)
     // Open devTool if the app is not packaged
     win.webContents.openDevTools()
   } else {
@@ -92,7 +94,10 @@ app.on('ready', async () => {
     responseHeaders['Cross-Origin-Embedder-Policy'] = ['require-corp'];
     callback({ cancel: false, responseHeaders });
   });
-  
+
+  whisperInit()
+  win?.webContents.send('whisper-change', { data: true })
+
   protocol.registerFileProtocol('play', (request, callback) => {
     const url = request.url.substr(7)
     callback(decodeURI(url));
@@ -125,15 +130,13 @@ app.on('ready', async () => {
 })
 
 app.commandLine.appendSwitch('lang', 'eng')
-// app.commandLine.appendSwitch("enable-webassembly")
-// app.commandLine.appendSwitch('js-flags', '--harmony_proxies --experimental-wasm-threads --experimental-wasm-bulk-memory')
-// --experimental-wasm-bulk-memory
 
 app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
   win = null
   if (process.platform !== 'darwin') app.quit()
+  gwhisper?.free()
 })
 
 app.on('second-instance', () => {
@@ -153,11 +156,40 @@ app.on('activate', () => {
   }
 })
 
+function transASR(pcm: Float32Array, tranlate: Boolean) {
+  // const data = fs.readFileSync(fname)
+  // const pcm = new Float32Array(data.buffer)
+  const ret = gwhisper?.full_default(pcm, "en", tranlate)
+  if (ret !== 0) {
+    console.log("fail to transcribe")
+  }
+}
+
 // MacOS open recent events
 app.on('open-file', (event, path) => {
   event.preventDefault()
   win?.setTitle(basename(path))
-  win?.webContents.send('file-selected', { path: path })
+  const mimeCodec = getMimeTypes(path)
+  win?.webContents.send('file-selected', { path: path, mime: mimeCodec })
+  if (mimeCodec == 'audio/pcm') {
+    const data = fs.readFileSync(path)
+    const pcm = new Float32Array(data.buffer)
+    console.log(pcm)
+    const duration = pcm.length/16000
+    var round = 0
+    console.log("duration is ", duration)
+    //every round 5 seconds audio will take 6 seconds to process
+    while (duration > 5 * (round + 1)) {
+      console.log("round start at ", (new Date().getTime()) / 1000)
+      var end = 16000 * 5 * (round + 1) - 1
+      if (duration < 5 * (round + 1)) {
+        end = 16000 * duration - 1
+      }
+      transASR(pcm.slice(16000 * 5 *round, end), false)
+      round = round + 1
+      console.log("round end at", (new Date().getTime()) / 1000)
+    }
+  }
 })
 
 // New window example arg: new windows url
@@ -204,7 +236,6 @@ ipcMain.on('show-error-box', (event, arg) => {
   dialog.showErrorBox('Oops! Something went wrong!', 'Help us improve your experience by sending an error report')
 });
 
-
 ipcMain.on('play-progress', (event, progress) => {
   win?.setProgressBar(progress)
 })
@@ -212,3 +243,8 @@ ipcMain.on('play-progress', (event, progress) => {
 ipcMain.on('play-status', (e, value) => {
   playstatus = value
 })
+
+ipcMain.on('audio-channel', (event, data: Float32Array) => {
+  console.log("channel data", data.length)
+  transASR(data, false)
+});

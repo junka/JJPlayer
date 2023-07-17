@@ -26,6 +26,7 @@ const Mimetypes: any = {
     'opus' : 'audio/opus',
     'weba' : 'audio/webm',
     '3g2' : 'video/3gpp2',
+    'pcmf32' : 'audio/pcm',
 };
  
 /**

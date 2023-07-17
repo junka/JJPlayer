@@ -68,7 +68,6 @@ export class SharedBufferWorkletNode extends AudioWorkletNode {
             this.port.postMessage(data.SharedBuffers);
             return;
         }
-
         if (data.message === 'WORKER_ERROR') {
             console.log(`[SharedBufferWorklet] Worker Error: ${data.detail}`);
             if (typeof this.onError === 'function') {
