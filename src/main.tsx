@@ -2,7 +2,6 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import videojs from 'video.js'
 import { ipcRenderer } from "electron"
-import * as fs from 'node:fs'
 import {getMimeTypes} from './mime'
 import {SharedBufferWorkletNode} from './audioworker-node'
 
@@ -10,13 +9,9 @@ declare type Player = ReturnType<typeof videojs>
 
 let whisper = true
 
-if (!navigator.storage || !navigator.storage.estimate) {
-  console.log('navigator is not support')
-} else {
-  navigator.storage.estimate().then((est) => {
-    console.log("navigator bytes", est.quota, est.usage)
-  })
-}
+const mimeCodec = 'video/mp4'
+const test = MediaSource.isTypeSupported(mimeCodec)
+console.log("test support for ", mimeCodec, test)
 
 
 declare global {
@@ -31,38 +26,38 @@ interface playConfig {
   video: Player | null;
   tracks: HTMLTrackElement[];
   progressv: number
-  mediasrc: MediaSource
+  mediasrc: MediaSource | null
   audioContext: AudioContext
   // sbwn : SharedBufferWorkletNode | null
 }
 
-const usefile = "/Users/admin/proj/github/mmp/mpp/jfk.wav"
 const videoOptions = {
-    html5: { nativeAudioTracks: false },
-    responsive: true,
-    fill: false,
-    controls: true,
-    autoplay: true,
-    preload: 'auto',
-    liveui: true,
-    playbackRates: [0.5, 1, 1.5, 2, 3, 4],
-  sources: [{ "src": 'play://' + usefile }],
+  html5: { nativeAudioTracks: false },
+  responsive: true,
+  fill: false,
+  controls: true,
+  autoplay: true,
+  preload: 'auto',
+  liveui: true,
+  playbackRates: [0.5, 1, 1.5, 2, 3, 4],
+  // sources: [{ "src": '' }],
 }
 
 let player: playConfig = {
   video : null,
   tracks : [],
   progressv : -1,
-  mediasrc : new MediaSource(),
+  mediasrc : null,
   audioContext : new AudioContext(),
   // sbwn: null
 }
 
 const onPlayerReady = (rplayer: Player) => {
   player.video = rplayer
-  // videojs.log('player is ready', rplayer);
-  rplayer.src({ type: 'video/mp4', src: URL.createObjectURL(player.mediasrc)})
-
+  const playButton = document.querySelector('vhs-big-play-button')
+  playButton?.addEventListener('click', () => {
+    console.log("aaaa")
+  })
   rplayer.on('waiting', () => {
     videojs.log('player is waiting');
   })
@@ -186,203 +181,6 @@ ipcRenderer.on('play-action', (event, action) => {
     }
 })
 
-
-player.mediasrc.addEventListener('error', (e) => {
-  console.log("media source error", e)
-})
-
-// function getMimeCodec(type: string, bytes: Buffer) {
-//   var probed;
-//   var parse;
-//   if (type === 'mp4') {
-//     probed = muxjs.mp4.probe.tracks(bytes)
-//     parse = muxjs.mp4.tools.inspect(bytes)
-//   } else {
-//     probed = muxjs.mp2t
-//     console.log(probed)
-//     parse = muxjs.mp2t.tools.inspect(bytes)
-//     console.log(parse)
-//   }
-//   var isFragmented = false
-//   for (var i = 0; i < parse.length; i++) {
-//     if (parse[i].type === 'moof') {
-//       isFragmented = true
-//       break
-//     }
-//   }
-//   for (var i = 0; i < probed.length; i++) {
-//     if (probed[i].type === 'video') {
-//       checkSupportedCodec(probed[i].codec)
-//     }
-//   }
-//   const mimeCodec = "video/" + type + "; codecs=" + probed.map((t: any) => t.codec).join(",");
-//   // const moofBoxIndex = bytes.indexOf('moof');
-//   // const isFragmented = moofBoxIndex !== -1;
-//   return { mimeCodec, isFragmented }
-// }
-
-player.mediasrc.addEventListener('sourceopen', (evt) => {
-  // const bytes = fs.readFileSync(usefile)
-  // console.log("source open", evt)
-  // const { mimeCodec, isFragmented } = getMimeCodec('mp4', bytes)
-  // const mimeCodec = 'video/mp4; codecs="avc1.42c01e,mp4a.40.2"';
-  // const mimeCodec = 'video/mp4; codecs="avc1.4d4016,mp4a.40.2"'
-  const mimeCodec = getMimeTypes(usefile)
-  if (mimeCodec.startsWith('audio')) {
-    player.video?.disablePictureInPicture(true)
-    // player.video?.audioOnlyMode(true)
-  }
-  const isFragmented = false
-  // console.log(mimeCodec)
-  if (!MediaSource.isTypeSupported(mimeCodec)) {
-    console.log("not support for ", mimeCodec)
-    
-    function playPCMMedia(ab: ArrayBuffer) {
-      initAudioWorker((sb) => {
-        const pcm = new Float32Array(ab)
-        const audioSrc = player.audioContext.createBufferSource();
-        const chanBuf = audioSrc.buffer?.getChannelData(0)
-        chanBuf?.set(pcm)
-        sb.connect(player.audioContext.destination)
-        audioSrc.connect(sb)
-        
-        audioSrc.start(0)
-        player.video?.play()
-        // player.video?.duration(ab.duration)
-        console.log("ab ", ab)
-        player.audioContext.resume()
-
-        // var audio = ab.getChannelData(0)
-        // console.log(audio.length)
-
-        const offlineCtx = new OfflineAudioContext({
-          numberOfChannels: 1,
-          length: ab.byteLength,
-          sampleRate: 16000,
-        })
-
-        offlineCtx.oncomplete = (e) => {
-          console.log("offline audio render complete", e)
-        }
-
-        offlineCtx.startRendering().then((rbuf:AudioBuffer) => {
-          console.log("start222 rendering", rbuf)
-          var audio = rbuf.getChannelData(0)
-          console.log("rbuf size", rbuf.length)
-          console.log("audio loaded, size: ", audio.length)
-          if (whisper) {
-            ipcRenderer.send('audio-channel', audio)
-          }
-        })
-      })
-    }
-    function decodeCustomMedia(buffer: ArrayBuffer) {
-      // const gain = player.audioContext.createGain()
-      player.audioContext.decodeAudioData(buffer, (ab) => {
-        initAudioWorker((sb) => {
-          console.log("ab ", ab)
-          // const audioSrc = player.audioContext.createBufferSource();
-          // audioSrc.buffer = ab
-          // sb.connect(player.audioContext.destination)
-          // audioSrc.connect(sb)
-
-          //do reasmple to 16000
-          const offlineCtx = new OfflineAudioContext({
-            numberOfChannels: 1,
-            length: ab.duration * 16000,
-            sampleRate: 16000,
-          })
-
-          offlineCtx.oncomplete = (e) => {
-            console.log("offline audio render complete", e)
-          }
-
-          offlineCtx.startRendering().then((rbuf:AudioBuffer) => {
-            console.log("start11 rendering", rbuf)
-            var audio = rbuf.getChannelData(0)
-            console.log("rbuf size", rbuf.length)
-            console.log("audio loaded, size: ", audio.length)
-            ipcRenderer.send('audio-channel', audio)
-          })
-          const audioSrc = offlineCtx.createBufferSource();
-          audioSrc.buffer = ab
-          audioSrc.connect(offlineCtx.destination)
-          audioSrc.start()
-
-          // audioSrc.start(0)
-          player.video?.duration(ab.duration)
-          player.video?.play()
-          player.audioContext.resume()
-        })
-      }, (err) => {
-        console.log("unable to get audio file", err)
-      })
-    }
-
-    if (mimeCodec == 'audio/pcm') {
-      fetchAB('play://' + usefile, playPCMMedia)
-    } else {
-      fetchAB('play://' + usefile, decodeCustomMedia)
-    }
-
-  } else {
-    // for those mediasource supported format
-    const srcbuf = player.mediasrc.addSourceBuffer(mimeCodec)
-    srcbuf.onerror = (e) => {
-      console.log('source buffer err', e)
-    }
-
-    srcbuf.onupdate = (e: any) => {
-      console.log("update", e)
-    }
-
-    srcbuf.onupdateend = () => {
-      console.log("update end: media src ready state", srcbuf.updating, player.mediasrc.readyState);
-      if (!srcbuf.updating && player.mediasrc.readyState === 'open') {
-        player.mediasrc.endOfStream()
-      }
-    }
-
-    function decodeForMedaiSrc(buffer: ArrayBuffer) {
-      srcbuf.appendBuffer(buffer)
-      player.audioContext.decodeAudioData(buffer, (ab: AudioBuffer) => {
-        console.log("audiobuffer", ab)
-        const offlineCtx = new OfflineAudioContext({
-          numberOfChannels: 1,
-          length: ab.duration * 16000,
-          sampleRate: 16000,
-        })
-
-        offlineCtx.oncomplete = (e) => {
-          var audio = e.renderedBuffer.getChannelData(0)
-          console.log("offline audio", audio.length)
-          console.log("whisper", whisper)
-          if (whisper) {
-            ipcRenderer.send('audio-channel', audio)
-          }
-        }
-
-        const audioSrc = offlineCtx.createBufferSource();
-        // audioSrc.buffer?.copyToChannel(ab.getChannelData(0), 0, 0)
-        audioSrc.buffer = ab
-        audioSrc.connect(offlineCtx.destination)
-        audioSrc.start()
-        offlineCtx.startRendering()
-
-      }, (err) => {
-        console.log("unable to get audio file", err)
-      })
-
-      
-    }
-    fetchAB('play://' + usefile, decodeForMedaiSrc)
-  }
-})
-
-player.mediasrc.onsourceended = () => {
-  console.log("source ended", player.mediasrc.readyState)
-}
-
 function fetchAB(url: string, callback: Function) {
   var xhr = new XMLHttpRequest;
   xhr.open('get', url);
@@ -394,9 +192,153 @@ function fetchAB(url: string, callback: Function) {
 }
 
 ipcRenderer.on('file-selected', (event, { path, mime }) => {
-  const playpath = "play://" + path
+  console.log('file selected')
   if (player.video) {
-    URL.revokeObjectURL(player.video.src({ src: playpath, type: mime }) as string)
+    const mediasrc = new MediaSource()
+    player.mediasrc = mediasrc
+
+    mediasrc.addEventListener('sourceopen', (evt) => {
+      console.log("source open", evt)
+      // const mimeCodec = 'video/mp4; codecs="avc1.4d4016,mp4a.40.2"'
+      if (mime.startsWith('audio')) {
+        player.video?.disablePictureInPicture(true)
+        // player.video?.audioOnlyMode(true)
+      }
+
+      if (!MediaSource.isTypeSupported(mime)) {
+        console.log("not support for ", mime)
+
+        function playPCMMedia(ab: ArrayBuffer) {
+          initAudioWorker((sb) => {
+            const pcm = new Float32Array(ab)
+            const audioSrc = player.audioContext.createBufferSource();
+            const chanBuf = audioSrc.buffer?.getChannelData(0)
+            chanBuf?.set(pcm)
+            sb.connect(player.audioContext.destination)
+            audioSrc.connect(sb)
+
+            audioSrc.start(0)
+            player.video?.play()
+            // player.video?.duration(ab.duration)
+            console.log("ab ", ab)
+            player.audioContext.resume()
+
+            const offlineCtx = new OfflineAudioContext({
+              numberOfChannels: 1,
+              length: ab.byteLength,
+              sampleRate: 16000,
+            })
+
+            offlineCtx.oncomplete = (e) => {
+              console.log("offline audio render complete", e)
+            }
+
+            offlineCtx.startRendering().then((rbuf:AudioBuffer) => {
+              console.log("start222 rendering", rbuf)
+              var audio = rbuf.getChannelData(0)
+              console.log("rbuf size", rbuf.length)
+              console.log("audio loaded, size: ", audio.length)
+              if (whisper) {
+                ipcRenderer.send('audio-channel', audio)
+              }
+            })
+          })
+        }
+        function decodeCustomMedia(buffer: ArrayBuffer) {
+          // const gain = player.audioContext.createGain()
+          player.audioContext.decodeAudioData(buffer, (ab) => {
+            initAudioWorker((sb) => {
+              // console.log("ab ", ab)
+              //do reasmple to 16000
+              const offlineCtx = new OfflineAudioContext({
+                numberOfChannels: 1,
+                length: ab.duration * 16000,
+                sampleRate: 16000,
+              })
+
+              offlineCtx.oncomplete = (e) => {
+                console.log("offline audio render complete", e)
+              }
+
+              offlineCtx.startRendering().then((rbuf:AudioBuffer) => {
+                console.log("start11 rendering", rbuf)
+                var audio = rbuf.getChannelData(0)
+                console.log("rbuf size", rbuf.length)
+                console.log("audio loaded, size: ", audio.length)
+                ipcRenderer.send('audio-channel', audio)
+              })
+              const audioSrc = offlineCtx.createBufferSource();
+              audioSrc.buffer = ab
+              audioSrc.connect(offlineCtx.destination)
+              audioSrc.start()
+
+              player.video?.duration(ab.duration)
+              player.video?.play()
+              player.audioContext.resume()
+
+              const audioSrcP = player.audioContext.createBufferSource();
+              audioSrcP.buffer = ab
+              sb.connect(player.audioContext.destination)
+              audioSrcP.connect(sb)
+              audioSrcP.start()
+            })
+          }, (err) => {
+            console.log("unable to get audio file", err)
+          })
+        }
+
+        if (mime == 'audio/pcm') {
+          fetchAB('play://' + path, playPCMMedia)
+        } else {
+          fetchAB('play://' + path, decodeCustomMedia)
+        }
+
+      } else {
+        // for those mediasource supported format
+        const srcbuf = mediasrc.addSourceBuffer(mime)
+        srcbuf.onupdateend = () => {
+          if (!srcbuf.updating && mediasrc.readyState === 'open') {
+            mediasrc.endOfStream()
+          }
+        }
+
+        function decodeForMedaiSrc(buffer: ArrayBuffer) {
+          srcbuf.appendBuffer(buffer)
+          player.audioContext.decodeAudioData(buffer, (ab: AudioBuffer) => {
+            console.log("audiobuffer", ab)
+            const offlineCtx = new OfflineAudioContext({
+              numberOfChannels: 1,
+              length: ab.duration * 16000,
+              sampleRate: 16000,
+            })
+
+            offlineCtx.oncomplete = (e) => {
+              var audio = e.renderedBuffer.getChannelData(0)
+              console.log("offline audio", audio.length)
+              console.log("whisper", whisper)
+              if (whisper) {
+                ipcRenderer.send('audio-channel', audio)
+              }
+            }
+
+            const audioSrc = offlineCtx.createBufferSource();
+            // audioSrc.buffer?.copyToChannel(ab.getChannelData(0), 0, 0)
+            audioSrc.buffer = ab
+            audioSrc.connect(offlineCtx.destination)
+            audioSrc.start()
+            offlineCtx.startRendering()
+
+          }, (err) => {
+            console.log("unable to get audio file", err)
+          })
+
+        }
+        fetchAB('play://' + path, decodeForMedaiSrc)
+      }
+    })
+
+    player.video.src({ type: mime, src: URL.createObjectURL(mediasrc)})
+    // videojs.log('player is ready', rplayer);
   }
 
   player.tracks.forEach((t, i) => {

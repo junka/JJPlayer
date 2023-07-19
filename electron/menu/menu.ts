@@ -19,6 +19,9 @@ export function whisperInit() {
                     console.log("right:", e)
                     win?.webContents.send('subtitle-txt', { subtitle: text })
                 }
+            },
+            printErr: (e: any) => {
+                //this override could depress init logging
             }
         }).then((whisper: any) => {
             const modname = 'whisper.bin'

@@ -6,6 +6,8 @@ import { getTemplate, show_open_dialog, gwhisper, whisperInit} from '../menu/men
 import { i18n } from '../i18n/i18n'
 import * as fs from 'node:fs'
 import { getMimeTypes } from '../../src/mime'
+import { FFprobeWorker, Stream } from '../ffprobe/FFprobeWorker'
+// import { createFFmpeg } from '@ffmpeg/ffmpeg'
 
 process.env.DIST_ELECTRON = join(__dirname, '../')
 process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
@@ -36,6 +38,7 @@ const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
 const indexHtml = join(process.env.DIST, 'index.html')
 
+const ffprobe = new FFprobeWorker()
 let playstatus = 0
 
 async function createWindow() {
@@ -87,6 +90,68 @@ protocol.registerSchemesAsPrivileged([
     }}
 ])
 
+
+// see https://developer.mozilla.org/en-US/docs/Web/Media/Formats/codecs_parameter
+async function probeMediaFile(file: string) {
+  const info = await ffprobe.getFileInfo(file)
+  // ffprobe.getFileInfo(usefile)
+  const format = info.format
+  const streams = info.streams
+  let mimecodec = ""
+  let type = null
+  let P = 0
+  for (var i = 0; i < format.nb_streams; i ++) {
+    // console.log(streams[i])
+    // const mimeCodec = 'video/mp4; codecs="avc1.4d4016,mp4a.40.2"'
+    if (streams[i].codec_type == "video" && (type === null || type === "audio")) {
+      type = "video"
+    } else if (type === null && streams[i].codec_type == "audio") {
+      type = "audio"
+    }
+    if (streams[i].codec_name === 'h264') {
+      mimecodec += "avc"
+    }
+
+    if (streams[i].profile == 'High') {
+      P = 1
+    } else if (streams[i].profile == 'Professional') {
+      P = 2
+    } else if (streams[i].profile == 'Main') {
+      P = 0
+    }
+  }
+}
+
+
+const avc1Profile: any = {
+  'Constrained': '40',
+  'Base': '42',
+  'Main': '4d',
+  'High': '64',
+}
+
+function readavc1(stream: Stream) {
+  var prof = ''
+  var constrain = '40'
+  prof = avc1Profile[stream.profile]
+  return '.' + prof + constrain + stream.level
+}
+
+const mp4aObjectType: any = {
+  'Main': '1',
+  'LC': '2',
+  'SSR': '3',
+  'LTP': '4',
+  'SBR': '5',
+  'Scalable': '6',
+};
+function readmp4a(stream: Stream) {
+  var prof = ''
+  prof = mp4aObjectType[stream.profile]
+  return "40" + '.' + prof
+}
+
+
 app.on('ready', async () => {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders as Record<string, string[]>;
@@ -127,6 +192,11 @@ app.on('ready', async () => {
   const contextMenu = Menu.buildFromTemplate(menutemplate as MenuItemConstructorOptions[])
   tray.setContextMenu(contextMenu)
   tray.setToolTip('JJPlayer')
+
+  //TODO
+  const usefile = "/Users/admin/proj/github/mmp/mpp/007.mkv"
+  win?.webContents.send('file-selected', { path: usefile, mime: getMimeTypes(usefile) });
+  probeMediaFile(usefile)
 })
 
 app.commandLine.appendSwitch('lang', 'eng')

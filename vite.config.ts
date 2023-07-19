@@ -87,7 +87,72 @@ export default defineConfig(({ command }) => {
               },
             },
           },
-        }
+        },
+        {
+          entry: 'electron/ffprobe/ffprobe-wasm.js',
+          vite: {
+            build: {
+              sourcemap,
+              minify: isBuild,
+              outDir: 'dist-electron/main',
+              rollupOptions: {
+                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
+              },
+            },
+          },
+        },
+        {
+          entry: 'electron/ffprobe/ffprobe-worker-node.js',
+          vite: {
+            build: {
+              sourcemap,
+              minify: isBuild,
+              outDir: 'dist-electron/main',
+              rollupOptions: {
+                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
+              },
+            },
+          },
+        },
+        {
+          entry: 'electron/ffprobe/ffprobe-worker.js',
+          vite: {
+            build: {
+              sourcemap,
+              minify: isBuild,
+              outDir: 'dist-electron/main',
+              rollupOptions: {
+                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
+              },
+            },
+          },
+        },
+        {
+          entry: 'electron/ffprobe/ffprobe-wasm.worker.js',
+          vite: {
+            build: {
+              sourcemap,
+              minify: isBuild,
+              outDir: 'dist-electron/main',
+              rollupOptions: {
+                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
+              },
+            },
+          },
+        },
+        {
+          entry: 'electron/ffprobe/FFprobeWorker.js',
+          vite: {
+            build: {
+              sourcemap,
+              minify: isBuild,
+              outDir: 'dist-electron/main',
+              rollupOptions: {
+                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
+              },
+            },
+          },
+        },
       ]),
       // Use Node.js API in the Renderer-process
       renderer(),
