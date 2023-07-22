@@ -2,10 +2,9 @@ import { dialog, shell, nativeTheme, app, MenuItemConstructorOptions, MenuItem }
 import { update } from '../main/update'
 import { basename } from 'node:path'
 import { i18n } from '../i18n/i18n'
-import { win } from '../main'
+import { win, probeMediaFile } from '../main'
 import * as fs from 'node:fs'
 import { whisper_factory } from '../whisper/whisper'
-import { getMimeTypes } from '../../src/mime'
 
 
 export var gwhisper: any = null
@@ -74,7 +73,7 @@ export function show_open_dialog() {
     }).then(result => {
         if (!result.canceled) {
             win?.setTitle(basename(result.filePaths[0]))
-            const mimeCodec = getMimeTypes(result.filePaths[0])
+            const mimeCodec = probeMediaFile(result.filePaths[0])
             win?.webContents.send('file-selected', { path: result.filePaths[0], mime: mimeCodec })
             app.addRecentDocument(result.filePaths[0])
         }
@@ -99,6 +98,23 @@ function show_subtitle_dialog() {
         console.log(err)
     })
 }
+
+function show_export_subtitle_dialog() {
+    dialog.showSaveDialog({
+        title: i18n.__('Save'),
+        defaultPath: '~/Downloads/whisper.vtt',
+        filters: [
+            { name: 'Subtitle Files', extensions: ['vtt'] },
+        ],
+        properties: ['showOverwriteConfirmation', 'dontAddToRecent'],
+    }).then(ret => {
+        if (!ret.canceled && ret.filePath) {
+            console.log("write to ", ret.filePath)
+            win?.webContents.send('subtitle-save', { path: ret.filePath })
+        }
+    }).catch(err => {})
+}
+
 
 export const getTemplate = (): Array<MenuItemConstructorOptions | MenuItem> => {
     return [
@@ -198,6 +214,12 @@ export const getTemplate = (): Array<MenuItemConstructorOptions | MenuItem> => {
                                     whisperUninit()
                                     win?.webContents.send('whisper-change', { data: false })
                                 }
+                            }
+                        },
+                        {
+                            label: "export whisper",
+                            click: () => {
+                                show_export_subtitle_dialog()
                             }
                         }
                     ]

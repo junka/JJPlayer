@@ -1,18 +1,19 @@
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import videojs from 'video.js'
+import {join} from 'node:path'
+import fs from 'node:fs'
 import { ipcRenderer } from "electron"
-import {getMimeTypes} from './mime'
 import {SharedBufferWorkletNode} from './audioworker-node'
 
 declare type Player = ReturnType<typeof videojs>
 
 let whisper = true
 
-const mimeCodec = 'video/mp4'
-const test = MediaSource.isTypeSupported(mimeCodec)
-console.log("test support for ", mimeCodec, test)
+let whispervtt : string = 'WEBVTT\n\n'
 
+let whispertrack: any = null
+let lastplayfile: any = null
 
 declare global {
   interface Window {
@@ -54,10 +55,7 @@ let player: playConfig = {
 
 const onPlayerReady = (rplayer: Player) => {
   player.video = rplayer
-  const playButton = document.querySelector('vhs-big-play-button')
-  playButton?.addEventListener('click', () => {
-    console.log("aaaa")
-  })
+
   rplayer.on('waiting', () => {
     videojs.log('player is waiting');
   })
@@ -77,6 +75,25 @@ const onPlayerReady = (rplayer: Player) => {
       player.progressv = per
       ipcRenderer.send("play-progress", per / 100)
     }
+  })
+
+  rplayer.on('canplay', ()=> {
+    // whisperbuff.set(new TextEncoder().encode('WEBVTT\n\n00:01.000 --> 00:04.000\n- Never drink.'), buflen)
+    // buflen += 'WEBVTT\n\n00:01.000 --> 00:04.000\n- Never drink.'.length
+    // whisperbuff[buflen] = 0
+    // if (whisper && whispertrack === null) {
+    //   console.log('11 vtt track', new TextDecoder().decode(whisperbuff))
+    //   // const blob = new Blob(['WEBVTT\n\n00:01.000 --> 00:04.000\n- Never drink.'], { type: 'text/vtt' })
+    //   // const vttpath = URL.createObjectURL(blob)
+    //   whispertrack = rplayer.addRemoteTextTrack({
+    //     kind: 'captions',
+    //     label: 'en',
+    //     language: "English",
+    //     mode: "showing",
+    //     src: whispervttpath,
+    //   })
+    //   player.tracks.push(whispertrack as any)
+    // }
   })
  
   rplayer.on('play', () => {
@@ -192,7 +209,11 @@ function fetchAB(url: string, callback: Function) {
 }
 
 ipcRenderer.on('file-selected', (event, { path, mime }) => {
-  console.log('file selected')
+  if (lastplayfile !== path) {
+    whispervtt = 'WEBVTT\n\n'
+    lastplayfile = path
+  }
+  console.log('file selected', mime, MediaSource.isTypeSupported(mime))
   if (player.video) {
     const mediasrc = new MediaSource()
     player.mediasrc = mediasrc
@@ -361,26 +382,52 @@ ipcRenderer.on('subtitle-open', (event, { path }) => {
   }
 })
 
+ipcRenderer.on('subtitle-save', (e, {path}) => {
+  console.log('write file to ', path)
+  if (whisper && whispertrack !== null) {
+    fs.writeFile(path, whispervtt, 'utf-8', (err)=>{})
+  }
+})
+
 ipcRenderer.on('whisper-change', (event, {data}) => {
   console.log('whisper changed', data)
   whisper = data
+  if (whisper == false && whispertrack !== null) {
+    player.tracks.forEach((t, i) => {
+      if (t == whispertrack) {
+        player.video?.removeRemoteTextTrack(t)
+        player.tracks.splice(i, 1)
+        whispertrack = null
+      }
+    })
+  }
 })
 
 ipcRenderer.on('subtitle-txt', (event, {subtitle}) => {
   console.log('sub:', subtitle)
-  const blob = new Blob(['WEBVTT\n\n' +subtitle], { type: 'text/vtt' })
-  const vttpath = URL.createObjectURL(blob)
-  // const vttpath = encodeURI("play://" + file)
-  if (player.video) {
-    const t = player.video.addRemoteTextTrack({
-      kind: 'captions',
-      label: 'en',
-      language: "English",
-      mode: "showing",
-      src: vttpath,
-    })
-    player.tracks.push(t as any)
-    console.log('sub:', subtitle)
+  if (whisper) {
+    whispervtt += subtitle+'\n\n'
+    const blob = new Blob([whispervtt], { type: 'text/vtt' })
+    const vttpath = URL.createObjectURL(blob)
+    if (whispertrack !== null) {
+      player.tracks.forEach((t, i) => {
+        if (t == whispertrack) {
+          player.video?.removeRemoteTextTrack(t)
+          player.tracks.splice(i, 1)
+          whispertrack = null
+        }
+      })
+    }
+    if (whispertrack === null) {
+        whispertrack = player.video?.addRemoteTextTrack({
+          kind: 'captions',
+          label: 'en',
+          language: "English",
+          mode: "showing",
+          src: vttpath,
+        })
+        player.tracks.push(whispertrack as any)
+    }
   }
 })
 
