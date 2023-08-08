@@ -5,16 +5,15 @@ import { update } from './update'
 import { getTemplate, show_open_dialog, gwhisper, whisperInit} from '../menu/menu'
 import { i18n } from '../i18n/i18n'
 import * as fs from 'node:fs'
-import { getMimeTypes } from '../../src/mime'
-import { FFprobeWorker, Stream, Format } from '../ffprobe/FFprobeWorker'
 // import { createFFmpeg } from '@ffmpeg/ffmpeg'
+import {GetMimeCodecs} from 'ffmime'
 
 process.env.DIST_ELECTRON = join(__dirname, '../')
 process.env.DIST = join(process.env.DIST_ELECTRON, '../dist')
 process.env.PUBLIC = process.env.VITE_DEV_SERVER_URL
   ? join(process.env.DIST_ELECTRON, '../public')
   : process.env.DIST
-process.env.JS_FLAGS = "--experimental-wasm-threads --experimental-wasm-bulk-memory"
+process.env.JS_FLAGS = "--unhandled-rejections=strict --experimental-wasm-threads --experimental-wasm-bulk-memory"
 
 // Disable GPU Acceleration for Windows 7
 if (release().startsWith('6.1')) app.disableHardwareAcceleration()
@@ -27,6 +26,7 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0)
 }
 
+
 // Remove electron security warnings
 // This warning only shows in development mode
 // Read more on https://www.electronjs.org/docs/latest/tutorial/security
@@ -38,7 +38,6 @@ const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
 const indexHtml = join(process.env.DIST, 'index.html')
 
-const ffprobe = new FFprobeWorker()
 let playstatus = 0
 
 async function createWindow() {
@@ -77,6 +76,7 @@ async function createWindow() {
 
   // Apply electron-updater
   update(win)
+  return win
 }
 
 protocol.registerSchemesAsPrivileged([
@@ -90,149 +90,11 @@ protocol.registerSchemesAsPrivileged([
     }}
 ])
 
-
-// see https://developer.mozilla.org/en-US/docs/Web/Media/Formats/codecs_parameter
-export async function probeMediaFile(file: string) {
-  const info = await ffprobe.getFileInfo(file)
-  const format = info.format
-  const streams = info.streams
-  let mimecodec = ""
-  let type = null
-  console.log(format)
-  var codecName = parseFormat(format)
-  for (var i = 0; i < format.nb_streams; i ++) {
-    console.log(streams[i])
-    // const mimeCodec = 'video/mp4; codecs="avc1.4d4016,mp4a.40.2"'
-    if (streams[i].codec_type == "video" && (type === null || type === "audio")) {
-      type = "video"
-    } else if (type === null && streams[i].codec_type == "audio") {
-      type = "audio"
-    }
-    if (streams[i].codec_name === 'h264' || streams[i].codec_name === 'x264') {
-      // codec_tag_string/codec_tag is not likyly reliable
-      if (mimecodec !== '') {
-        mimecodec += ', '
-      }
-      mimecodec += readavc1(streams[i])
-    } else if (streams[i].codec_name === 'vp8' || streams[i].codec_name === 'vp9') {
-      if (mimecodec !== '') {
-        mimecodec += ','
-      }
-      mimecodec += streams[i].codec_name
-    } else if (streams[i].codec_name === 'aac') {
-      if (mimecodec !== '') {
-        mimecodec += ', '
-      }
-      mimecodec += readmp4a(streams[i])
-    } else if (streams[i].codec_name === 'vorbis' || streams[i].codec_name === 'opus') {
-      if (mimecodec !== '') {
-        mimecodec += ','
-      }
-      mimecodec += streams[i].codec_name
-    } else if (streams[i].codec_name === 'mpeg4') {
-      if (mimecodec !== '') {
-        mimecodec += ','
-      }
-      mimecodec += streams[i].codec_name
-    }
-  }
-  if (type === 'video') {
-    if (codecName =='webm' && mimecodec.includes('avc1')) {
-      codecName = 'mp4'
-    }
-    return 'video/' + codecName + '; codecs="' + mimecodec +'"'
-  } else {
-    return 'audio/' + codecName
-  }
-}
-
-// webmedia containers:
-// 3GP
-// AV1
-//            av01.P.LLT.DD[.M.CCC.cp.tc.mc.F]
-// ISO BMFF, cccc[.pp]* 
-//            (Generic ISO BMFF), 
-//            mp4a.oo[.A] (MPEG-4 audio)
-//            mp4v.oo[.V] (MPEG-4 video)
-//            avc1[.PPCCLL](AVC video)
-// MPEG - 4
-//            mp4a.oo[.A]
-// QuickTime
-// WebM
-//            cccc.PP.LL.DD
-//            cccc.PP.LL.DD.CC.cp.tc.mc.FF
-
-function parseFormat(format: Format) {
-
-  if (format.tags.major_brand !== undefined) {
-    if (format.tags.major_brand == '3gp4') {
-      return '3gp'
-    } else if (format.tags.major_brand.startsWith('iso')) {
-      return 'mp4'
-    }
-  }
-  if (format.format_name.indexOf('webm')!== -1) {
-    return 'webm'
-  } else if (format.format_name.indexOf('mp4') !== -1) {
-    return 'mp4'
-  }
-  return ''
-}
- 
-
-function parseCodecTags(tag: string) {
-  if (tag === '0x31637661') {
-    return 'avc1'
-  } else if (tag === '0x7634706d') {
-    return 'mp4v'
-  } else if (tag === '0x6134706d') {
-    return 'mp4a'
-  }
-}
-
-const avc1Profile: any = {
-  'Constrained': '42',
-  'Baseline': '42',
-  'Extended': '58',
-  'Main': '4d',
-  'High': '64',
-  'High10': '6e',
-  'High422': '7a',
-  'High444': 'f4',
-}
-
-const avc1Contraint: any = {
-  'Constrained': '40',
-  'BaseLine': '00',
-  'Extended': '00',
-  'Main': '00',
-  'High': '00',
-}
-
-function readavc1(stream: Stream) {
-  var prof = avc1Profile[stream.profile] || 0
-  var constrain = avc1Contraint[stream.profile] || '40'
-  var constrainValue = (Number(constrain) << 10).toString(16).padStart(2, '0')
-  return 'avc1.' + prof + constrainValue + Number(stream.level).toString(16).padStart(2, '0')
-}
-
-const mp4aObjectType: any = {
-  'Main': '1',
-  'LC': '2',
-  'SSR': '3',
-  'LTP': '4',
-  'SBR': '5',
-  'Scalable': '6',
-};
-
-function readmp4a(stream: Stream) {
-  var prof = ''
-  prof = mp4aObjectType[stream.profile]
-  return 'mp4a.' + "40" + '.' + prof
-}
-
+app.commandLine.appendSwitch('lang', 'eng')
 
 app.on('ready', async () => {
+  createWindow()
+
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders as Record<string, string[]>;
     responseHeaders['Cross-Origin-Opener-Policy'] = ['same-origin'];
@@ -247,6 +109,7 @@ app.on('ready', async () => {
     const url = request.url.substr(7)
     callback(decodeURI(url));
   })
+
   i18n.active()
   const menu = Menu.buildFromTemplate(getTemplate())
   Menu.setApplicationMenu(menu)
@@ -273,19 +136,21 @@ app.on('ready', async () => {
   tray.setContextMenu(contextMenu)
   tray.setToolTip('JJPlayer')
 
-  const usefile = "/Users/admin/proj/github/mmp/mpp/elephants-dream.webm"
-  const mimeType = await probeMediaFile(usefile)
-
+  const usefile = "/Users/admin/proj/github/mmp/mpp/test.mp4"
+  var mimeCodec = await GetMimeCodecs(usefile)
+  // const mimeType = "video/mp4; codecs=\"avc1.640029, mp4a.40.2\""
+  if (mimeCodec.startsWith("video/x-matroska")) {
+    mimeCodec = mimeCodec.replace("video/x-matroska", "video/mp4")
+  } else if (mimeCodec.startsWith("video/quicktime")) {
+    mimeCodec = mimeCodec.replace("video/quicktime", "video/mp4")
+  }
   win?.webContents.once('did-finish-load', ()=> {
-    console.log("mime", mimeType)
-    win?.webContents.send('file-selected', { path: usefile, mime: mimeType });
+    console.log("mime", mimeCodec)
+    win?.webContents.send('file-selected', { path: usefile, mime: mimeCodec });
   })
 })
 
-
-app.commandLine.appendSwitch('lang', 'eng')
-
-app.whenReady().then(createWindow)
+// app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
   win = null
@@ -311,8 +176,6 @@ app.on('activate', () => {
 })
 
 function transASR(pcm: Float32Array, tranlate: Boolean) {
-  // const data = fs.readFileSync(fname)
-  // const pcm = new Float32Array(data.buffer)
   const ret = gwhisper?.full_default(pcm, "en", tranlate)
   if (ret !== 0) {
     console.log("fail to transcribe")
@@ -323,12 +186,12 @@ function transASR(pcm: Float32Array, tranlate: Boolean) {
 app.on('open-file', async (event, path) => {
   event.preventDefault()
   win?.setTitle(basename(path))
-  const mimetype = getMimeTypes(path)
-  var mimeCodec
-  if (mimetype.startsWith('audio')) { 
-    mimeCodec = mimetype
+  var mimeCodec = await GetMimeCodecs(path)
+  if (mimeCodec.startsWith("video/x-matroska")) {
+    mimeCodec = mimeCodec.replace("video/x-matroska", "video/mp4")
+  } else if (mimeCodec.startsWith("video/quicktime")) {
+    mimeCodec = mimeCodec.replace("video/quicktime", "video/mp4")
   }
-  mimeCodec = await probeMediaFile(path)
   win?.webContents.send('file-selected', { path: path, mime: mimeCodec })
   if (mimeCodec == 'audio/pcm') {
     const data = fs.readFileSync(path)
@@ -405,5 +268,5 @@ ipcMain.on('play-status', (e, value) => {
 
 ipcMain.on('audio-channel', (event, data: Float32Array) => {
   console.log("channel data", data.length)
-  transASR(data, false)
+  // transASR(data, false)
 });

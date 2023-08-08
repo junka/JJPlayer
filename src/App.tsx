@@ -28,34 +28,6 @@ const App: React.FC<AppProps> = (props) => {
                     onReady(player);
                 }
             });
-            // player.touchOverlay({
-            //     seekLeft: {
-            //         handleClick: () => {
-            //             const time = Number(player.currentTime()) - 10;
-
-            //             player.currentTime(time);
-            //         },
-            //         doubleTap: true,
-            //     },
-            //     play: {
-            //         handleClick: () => {
-            //             if (player.paused()) {
-            //                 player.play();
-            //             } else {
-            //                 player.pause();
-            //             }
-            //         },
-            //     },
-            //     seekRight: {
-            //         handleClick: () => {
-            //             const time = Number(player.currentTime()) + 10;
-
-            //             player.currentTime(time);
-            //         },
-            //         doubleTap: true,
-            //     },
-            //     lockButton: false
-            // })
             playerRef.current = player
         } else {
 

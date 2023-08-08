@@ -2,9 +2,10 @@ import { dialog, shell, nativeTheme, app, MenuItemConstructorOptions, MenuItem }
 import { update } from '../main/update'
 import { basename } from 'node:path'
 import { i18n } from '../i18n/i18n'
-import { win, probeMediaFile } from '../main'
+import { win } from '../main'
 import * as fs from 'node:fs'
 import { whisper_factory } from '../whisper/whisper'
+import { GetMimeCodecs } from 'ffmime'
 
 
 export var gwhisper: any = null
@@ -73,7 +74,12 @@ export function show_open_dialog() {
     }).then(result => {
         if (!result.canceled) {
             win?.setTitle(basename(result.filePaths[0]))
-            const mimeCodec = probeMediaFile(result.filePaths[0])
+            var mimeCodec = GetMimeCodecs(result.filePaths[0])
+            if (mimeCodec.startsWith("video/x-matroska")) {
+                mimeCodec = mimeCodec.replace("video/x-matroska", "video/mp4")
+            } else if (mimeCodec.startsWith("video/quicktime")) {
+                mimeCodec = mimeCodec.replace("video/quicktime", "video/mp4")
+            }
             win?.webContents.send('file-selected', { path: result.filePaths[0], mime: mimeCodec })
             app.addRecentDocument(result.filePaths[0])
         }

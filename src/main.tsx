@@ -1,10 +1,10 @@
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import videojs from 'video.js'
-import {join} from 'node:path'
-import fs from 'node:fs'
+import * as fs from 'node:fs'
 import { ipcRenderer } from "electron"
 import {SharedBufferWorkletNode} from './audioworker-node'
+// import {Wavesurfer} from 'videojs-wavesurfer/dist/videojs.wavesurfer'
 
 declare type Player = ReturnType<typeof videojs>
 
@@ -42,7 +42,19 @@ const videoOptions = {
   liveui: true,
   playbackRates: [0.5, 1, 1.5, 2, 3, 4],
   // sources: [{ "src": '' }],
+  plugins : {
+    // wavesurfer: {
+    //   backend: 'MediaElement',
+    //   displayMilliseconds: true,
+    //   debug: true,
+    //   waveColor: 'gray',
+    //   progressColor: 'black',
+    //   cursorColor: 'black',
+    //   hideScrollbar: true
+    // }
+  }
 }
+
 
 let player: playConfig = {
   video : null,
@@ -55,6 +67,7 @@ let player: playConfig = {
 
 const onPlayerReady = (rplayer: Player) => {
   player.video = rplayer
+  console.log("player is ready")
 
   rplayer.on('waiting', () => {
     videojs.log('player is waiting');
@@ -77,24 +90,24 @@ const onPlayerReady = (rplayer: Player) => {
     }
   })
 
-  rplayer.on('canplay', ()=> {
-    // whisperbuff.set(new TextEncoder().encode('WEBVTT\n\n00:01.000 --> 00:04.000\n- Never drink.'), buflen)
-    // buflen += 'WEBVTT\n\n00:01.000 --> 00:04.000\n- Never drink.'.length
-    // whisperbuff[buflen] = 0
-    // if (whisper && whispertrack === null) {
-    //   console.log('11 vtt track', new TextDecoder().decode(whisperbuff))
-    //   // const blob = new Blob(['WEBVTT\n\n00:01.000 --> 00:04.000\n- Never drink.'], { type: 'text/vtt' })
-    //   // const vttpath = URL.createObjectURL(blob)
-    //   whispertrack = rplayer.addRemoteTextTrack({
-    //     kind: 'captions',
-    //     label: 'en',
-    //     language: "English",
-    //     mode: "showing",
-    //     src: whispervttpath,
-    //   })
-    //   player.tracks.push(whispertrack as any)
-    // }
-  })
+  // rplayer.on('canplay', ()=> {
+  //   // whisperbuff.set(new TextEncoder().encode('WEBVTT\n\n00:01.000 --> 00:04.000\n- Never drink.'), buflen)
+  //   // buflen += 'WEBVTT\n\n00:01.000 --> 00:04.000\n- Never drink.'.length
+  //   // whisperbuff[buflen] = 0
+  //   // if (whisper && whispertrack === null) {
+  //   //   console.log('11 vtt track', new TextDecoder().decode(whisperbuff))
+  //   //   // const blob = new Blob(['WEBVTT\n\n00:01.000 --> 00:04.000\n- Never drink.'], { type: 'text/vtt' })
+  //   //   // const vttpath = URL.createObjectURL(blob)
+  //   //   whispertrack = rplayer.addRemoteTextTrack({
+  //   //     kind: 'captions',
+  //   //     label: 'en',
+  //   //     language: "English",
+  //   //     mode: "showing",
+  //   //     src: whispervttpath,
+  //   //   })
+  //   //   player.tracks.push(whispertrack as any)
+  //   // }
+  // })
  
   rplayer.on('play', () => {
     console.log('play a video')
