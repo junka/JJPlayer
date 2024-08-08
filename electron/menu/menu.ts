@@ -8,8 +8,11 @@ import { whisper_factory } from '../whisper/whisper'
 import { GetMimeCodecs } from 'ffmime'
 
 
+let whiperMod: string = ''
+
 export var gwhisper: any = null
 export function whisperInit() {
+    whiperMod = process.env.PUBLIC + "/ggml-model-whisper-tiny.bin"
     if (gwhisper === null) {
         whisper_factory({
             print : (e: any) => {
@@ -25,7 +28,7 @@ export function whisperInit() {
             }
         }).then((whisper: any) => {
             const modname = 'whisper.bin'
-            const data = fs.readFileSync(process.env.PUBLIC + "/ggml-tiny.bin")
+            const data = fs.readFileSync(whiperMod)
             try {
                 whisper.FS_unlink(modname)
             } catch (e) {
@@ -74,14 +77,17 @@ export function show_open_dialog() {
     }).then(result => {
         if (!result.canceled) {
             win?.setTitle(basename(result.filePaths[0]))
-            var mimeCodec = GetMimeCodecs(result.filePaths[0])
-            if (mimeCodec.startsWith("video/x-matroska")) {
-                mimeCodec = mimeCodec.replace("video/x-matroska", "video/mp4")
-            } else if (mimeCodec.startsWith("video/quicktime")) {
-                mimeCodec = mimeCodec.replace("video/quicktime", "video/mp4")
-            }
-            win?.webContents.send('file-selected', { path: result.filePaths[0], mime: mimeCodec })
-            app.addRecentDocument(result.filePaths[0])
+            console.log(result.filePaths[0])
+            GetMimeCodecs(result.filePaths[0]).then((mimeCodec: string) => {
+                console.log(mimeCodec)
+                if (mimeCodec.startsWith("video/x-matroska")) {
+                    mimeCodec = mimeCodec.replace("video/x-matroska", "video/mp4")
+                } else if (mimeCodec.startsWith("video/quicktime")) {
+                    mimeCodec = mimeCodec.replace("video/quicktime", "video/mp4")
+                }
+                win?.webContents.send('file-selected', { path: result.filePaths[0], mime: mimeCodec })
+                app.addRecentDocument(result.filePaths[0])
+            })
         }
     }).catch(err => {
         console.log(err)
@@ -212,21 +218,47 @@ export const getTemplate = (): Array<MenuItemConstructorOptions | MenuItem> => {
                         },
                         {
                             label: "Whisper",
-                            click: () => {
-                                if (gwhisper === null) {
-                                    whisperInit()
-                                    win?.webContents.send('whisper-change', {data: true})
-                                } else {
-                                    whisperUninit()
-                                    win?.webContents.send('whisper-change', { data: false })
+                            submenu: [
+                                {
+                                    label: "Toggle",
+                                    click: () => {
+                                        if (gwhisper === null) {
+                                            whisperInit()
+                                            win?.webContents.send('whisper-change', {data: true})
+                                        } else {
+                                            whisperUninit()
+                                            win?.webContents.send('whisper-change', { data: false })
+                                        }
+                                    }
+                                },
+                                {
+                                    label: "export whisper",
+                                    click: () => {
+                                        show_export_subtitle_dialog()
+                                    }
+                                },
+                                {
+                                    label: "set model binary",
+                                    click: () => {
+                                        dialog.showOpenDialog({
+                                            title: i18n.__('Select model binary file'),
+                                            defaultPath: '~/Downloads',
+                                            filters: [
+                                                { name: 'Model Files', extensions: ['bin'] },
+                                            ],
+                                            properties: ['openFile', 'multiSelections'],
+                                        }).then(result => {
+                                            if (!result.canceled) {
+                                                win?.setTitle(basename(result.filePaths[0]))
+                                                console.log(result.filePaths[0])
+                                                whiperMod = result.filePaths[0]
+                                            }
+                                        }).catch(err => {
+                                            console.log(err)
+                                        })
+                                    }
                                 }
-                            }
-                        },
-                        {
-                            label: "export whisper",
-                            click: () => {
-                                show_export_subtitle_dialog()
-                            }
+                            ]
                         }
                     ]
                 },

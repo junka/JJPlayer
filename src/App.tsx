@@ -21,8 +21,8 @@ const App: React.FC<AppProps> = (props) => {
         if (!playerRef.current) {
             const videoElement = document.createElement("video-js")
             videoElement.classList.add("vjs-big-play-centered")
-            videoRef.current?.appendChild(videoElement)
 
+            videoRef.current?.appendChild(videoElement)
             const player = videojs(videoElement, options, () => {
                 if (onReady) { 
                     onReady(player);

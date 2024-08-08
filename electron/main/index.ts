@@ -175,8 +175,8 @@ app.on('activate', () => {
   }
 })
 
-function transASR(pcm: Float32Array, tranlate: Boolean) {
-  const ret = gwhisper?.full_default(pcm, "en", tranlate)
+function transASR(pcm: Float32Array, translate: Boolean) {
+  const ret = gwhisper?.full_default(pcm, "en", translate)
   if (ret !== 0) {
     console.log("fail to transcribe")
   }

@@ -83,8 +83,8 @@ const onPlayerReady = (rplayer: Player) => {
 
   // add progress bar in dock for video progress
   rplayer.on("timeupdate", (event: any) => {
-    const per = Math.floor(100 * rplayer.currentTime() / rplayer.duration())
-    if (!isNaN(rplayer.duration()) && !isNaN(per) && (per === 100 || per - player.progressv >= 1 || per < player.progressv)) {
+    const per = Math.floor(100 * (rplayer.currentTime() as number) / (rplayer.duration() as number))
+    if (!isNaN((rplayer.duration() as number)) && !isNaN(per) && (per === 100 || per - player.progressv >= 1 || per < player.progressv)) {
       player.progressv = per
       ipcRenderer.send("play-progress", per / 100)
     }
@@ -141,9 +141,9 @@ function initAudioWorker(initcb: (sb: SharedBufferWorkletNode)=> void) {
 
 const accelerations = ["prefer-hardware", "prefer-software"];
 
-// if ('VideoDecoder' in window) {
-//   console.log("WebCodec supported")
-// }
+if ('VideoDecoder' in window) {
+  console.log("WebCodec supported")
+}
 
 const readyFrames: VideoFrame[] = [];
 
@@ -190,11 +190,6 @@ async function checkSupportedCodec(codec: string) {
 // audioSource.connect(audioGain)
 // audioGain.connect(audioContext.destination)
 
-// for mp2t to mp4
-// transmuxer.on('done', () => {
-//   console.log("transmux done")
-// })
-
 // transmuxer.on('data', (segment: any) => {
 //   console.log("data fragment mp4 ready", segment)
 //   let data = new Uint8Array(segment.initSegment.byteLenth + segment.data.byteLenth)
@@ -233,7 +228,6 @@ ipcRenderer.on('file-selected', (event, { path, mime }) => {
 
     mediasrc.addEventListener('sourceopen', (evt) => {
       console.log("source open", evt)
-      // const mimeCodec = 'video/mp4; codecs="avc1.4d4016,mp4a.40.2"'
       if (mime.startsWith('audio')) {
         player.video?.disablePictureInPicture(true)
         // player.video?.audioOnlyMode(true)
@@ -321,23 +315,31 @@ ipcRenderer.on('file-selected', (event, { path, mime }) => {
           })
         }
 
-        if (mime == 'audio/pcm') {
+        if (mime === 'audio/pcm') {
           fetchAB('play://' + path, playPCMMedia)
         } else {
           fetchAB('play://' + path, decodeCustomMedia)
         }
 
       } else {
+        console.log("supported for ", mime)
         // for those mediasource supported format
         const srcbuf = mediasrc.addSourceBuffer(mime)
         srcbuf.onupdateend = () => {
+          console.log("update end")
           if (!srcbuf.updating && mediasrc.readyState === 'open') {
             mediasrc.endOfStream()
           }
         }
 
-        function decodeForMedaiSrc(buffer: ArrayBuffer) {
+        function decodeForMediaSrc(buffer: ArrayBuffer) {
+          console.log("decode for media source")
+
+          
+
           srcbuf.appendBuffer(buffer)
+          console.log("after append")
+
           player.audioContext.decodeAudioData(buffer, (ab: AudioBuffer) => {
             console.log("audiobuffer", ab)
             const offlineCtx = new OfflineAudioContext({
@@ -367,7 +369,7 @@ ipcRenderer.on('file-selected', (event, { path, mime }) => {
           })
 
         }
-        fetchAB('play://' + path, decodeForMedaiSrc)
+        fetchAB('play://' + path, decodeForMediaSrc)
       }
     })
 
