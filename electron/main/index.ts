@@ -91,6 +91,36 @@ protocol.registerSchemesAsPrivileged([
     }}
 ])
 
+// Chromium cannot play these containers even though the codec string is probed from them
+function normalizeMime(mime: string) {
+  if (mime.startsWith('video/x-matroska')) return mime.replace('video/x-matroska', 'video/mp4')
+  if (mime.startsWith('video/quicktime')) return mime.replace('video/quicktime', 'video/mp4')
+  return mime
+}
+
+export async function openMediaFile(path: string) {
+  win?.setTitle(basename(path))
+  const mime = normalizeMime(await GetMimeCodecs(path))
+  win?.webContents.send('file-selected', { path, mime })
+  app.addRecentDocument(path)
+  if (mime === 'audio/pcm') {
+    asrTranscribe(new Float32Array(fs.readFileSync(path).buffer))
+  }
+}
+
+// Media path passed on the command line: `JJPlayer /path/to/media`, `npx electron . /path/to/media`
+function firstMediaPath(argv: string[]) {
+  for (const arg of argv.slice(1)) {
+    if (arg.startsWith('-') || arg === '.') continue
+    try {
+      if (fs.statSync(arg).isFile()) return arg
+    } catch {
+      // not a readable path
+    }
+  }
+  return null
+}
+
 app.commandLine.appendSwitch('lang', 'eng')
 
 app.on('ready', async () => {
@@ -137,18 +167,10 @@ app.on('ready', async () => {
   tray.setContextMenu(contextMenu)
   tray.setToolTip('JJPlayer')
 
-  // TODO: remove hardcoded test file path
-  // const usefile = "/Users/admin/proj/github/mmp/mpp/test.mp4"
-  // var mimeCodec = await GetMimeCodecs(usefile)
-  // if (mimeCodec.startsWith("video/x-matroska")) {
-  //   mimeCodec = mimeCodec.replace("video/x-matroska", "video/mp4")
-  // } else if (mimeCodec.startsWith("video/quicktime")) {
-  //   mimeCodec = mimeCodec.replace("video/quicktime", "video/mp4")
-  // }
-  // win?.webContents.once('did-finish-load', ()=> {
-  //   console.log("mime", mimeCodec)
-  //   win?.webContents.send('file-selected', { path: usefile, mime: mimeCodec });
-  // })
+  const startFile = firstMediaPath(process.argv)
+  if (startFile) {
+    win?.webContents.once('did-finish-load', () => openMediaFile(startFile))
+  }
 })
 
 // app.whenReady().then(createWindow)
@@ -159,7 +181,11 @@ app.on('window-all-closed', () => {
   asrStop()
 })
 
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
+  const file = firstMediaPath(argv)
+  if (file) {
+    openMediaFile(file)
+  }
   if (win) {
     // Focus on the main window if the user tried to open another
     if (win.isMinimized()) win.restore()
@@ -179,18 +205,7 @@ app.on('activate', () => {
 // MacOS open recent events
 app.on('open-file', async (event, path) => {
   event.preventDefault()
-  win?.setTitle(basename(path))
-  var mimeCodec = await GetMimeCodecs(path)
-  if (mimeCodec.startsWith("video/x-matroska")) {
-    mimeCodec = mimeCodec.replace("video/x-matroska", "video/mp4")
-  } else if (mimeCodec.startsWith("video/quicktime")) {
-    mimeCodec = mimeCodec.replace("video/quicktime", "video/mp4")
-  }
-  win?.webContents.send('file-selected', { path: path, mime: mimeCodec })
-  if (mimeCodec == 'audio/pcm') {
-    const pcm = new Float32Array(fs.readFileSync(path).buffer)
-    asrTranscribe(pcm)
-  }
+  await openMediaFile(path)
 })
 
 // New window example arg: new windows url

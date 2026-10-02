@@ -31,7 +31,10 @@ export default defineConfig(({ command }) => {
             if (process.env.VSCODE_DEBUG) {
               console.log(/* For `.vscode/.debug.script.mjs` */'[startup] JJPlayer')
             } else {
-              options.startup()
+              // `JJ_MEDIA=/path/to/media npm run dev` opens that file on startup; a bare
+              // positional would be parsed by vite as the project root, so use the env var.
+              const media = process.env.JJ_MEDIA
+              options.startup(media ? ['.', '--no-sandbox', media] : undefined)
             }
           },
           vite: {

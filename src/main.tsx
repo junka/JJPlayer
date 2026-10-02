@@ -3,7 +3,6 @@ import App from './App'
 import videojs from 'video.js'
 import * as fs from 'node:fs'
 import { ipcRenderer } from "electron"
-import {SharedBufferWorkletNode} from './audioworker-node'
 // import {Wavesurfer} from 'videojs-wavesurfer/dist/videojs.wavesurfer'
 
 declare type Player = ReturnType<typeof videojs>
@@ -14,6 +13,8 @@ let subtitlevtt : string = 'WEBVTT\n\n'
 
 let autotrack: any = null
 let lastplayfile: any = null
+let openSeq = 0
+let pendingFile: { path: string; mime: string } | null = null
 
 declare global {
   interface Window {
@@ -27,9 +28,7 @@ interface playConfig {
   video: Player | null;
   tracks: HTMLTrackElement[];
   progressv: number
-  mediasrc: MediaSource | null
   audioContext: AudioContext
-  // sbwn : SharedBufferWorkletNode | null
 }
 
 const videoOptions = {
@@ -60,14 +59,18 @@ let player: playConfig = {
   video : null,
   tracks : [],
   progressv : -1,
-  mediasrc : null,
   audioContext : new AudioContext(),
-  // sbwn: null
 }
 
 const onPlayerReady = (rplayer: Player) => {
   player.video = rplayer
   console.log("player is ready")
+
+  if (pendingFile) {
+    const file = pendingFile
+    pendingFile = null
+    openFile(file.path, file.mime)
+  }
 
   rplayer.on('waiting', () => {
     videojs.log('player is waiting');
@@ -119,23 +122,6 @@ const onPlayerReady = (rplayer: Player) => {
     console.log('pause a video')
     ipcRenderer.send("play-status", 0)
     player.audioContext.suspend()
-  })
-}
-
-function initAudioWorker(initcb: (sb: SharedBufferWorkletNode)=> void) {
-  player.audioContext.audioWorklet.addModule(new URL('./audioworker-processor.ts', import.meta.url)).then(() => {
-    console.log('audio worker module added')
-    const sb = new SharedBufferWorkletNode(player.audioContext)
-    sb.onInitialized = () => {
-      console.log("sb inited")
-      initcb(sb)
-    }
-
-    sb.onError = () => {
-      console.log("sb error")
-    }
-
-    // player.sbwn = sb
   })
 }
 
@@ -206,182 +192,118 @@ ipcRenderer.on('play-action', (event, action) => {
     }
 })
 
-function fetchAB(url: string, callback: Function) {
-  var xhr = new XMLHttpRequest;
-  xhr.open('get', url);
-  xhr.responseType = 'arraybuffer';
-  xhr.onload = function () {
-    callback(xhr.response)
-  };
-  xhr.send();
+// XHR against the custom play:// scheme is blocked by CORS; the renderer already has node access
+function readAB(path: string, callback: (ab: ArrayBuffer) => void) {
+  callback(new Uint8Array(fs.readFileSync(path)).buffer)
 }
 
 ipcRenderer.on('file-selected', (event, { path, mime }) => {
+  console.log('file selected', mime)
+  if (!player.video) {
+    // The IPC can beat the player being created (startup file passed on the CLI)
+    pendingFile = { path, mime }
+    return
+  }
+  openFile(path, mime)
+})
+
+// Whole local files go through Chromium's own demuxer: MSE appendBuffer only accepts
+// fragmented MP4 (moov with mvex), so a normal mp4/mov fails with CHUNK_DEMUXER_ERROR_APPEND_FAILED.
+function openFile(path: string, mime: string) {
   if (lastplayfile !== path) {
     subtitlevtt = 'WEBVTT\n\n'
     lastplayfile = path
   }
-  console.log('file selected', mime, MediaSource.isTypeSupported(mime))
-  if (player.video) {
-    const mediasrc = new MediaSource()
-    player.mediasrc = mediasrc
+  if (!player.video) return
 
-    mediasrc.addEventListener('sourceopen', (evt) => {
-      console.log("source open", evt)
-      if (mime.startsWith('audio')) {
-        player.video?.disablePictureInPicture(true)
-        // player.video?.audioOnlyMode(true)
-      }
+  if (mime.startsWith('audio')) {
+    player.video.disablePictureInPicture(true)
+  }
 
-      if (!MediaSource.isTypeSupported(mime)) {
-        console.log("not support for ", mime)
-
-        function playPCMMedia(ab: ArrayBuffer) {
-          initAudioWorker((sb) => {
-            const pcm = new Float32Array(ab)
-            const audioSrc = player.audioContext.createBufferSource();
-            const chanBuf = audioSrc.buffer?.getChannelData(0)
-            chanBuf?.set(pcm)
-            sb.connect(player.audioContext.destination)
-            audioSrc.connect(sb)
-
-            audioSrc.start(0)
-            player.video?.play()
-            // player.video?.duration(ab.duration)
-            console.log("ab ", ab)
-            player.audioContext.resume()
-
-            const offlineCtx = new OfflineAudioContext({
-              numberOfChannels: 1,
-              length: ab.byteLength,
-              sampleRate: 16000,
-            })
-
-            offlineCtx.oncomplete = (e) => {
-              console.log("offline audio render complete", e)
-            }
-
-            offlineCtx.startRendering().then((rbuf:AudioBuffer) => {
-              console.log("start222 rendering", rbuf)
-              var audio = rbuf.getChannelData(0)
-              console.log("rbuf size", rbuf.length)
-              console.log("audio loaded, size: ", audio.length)
-              if (asrOn) {
-                ipcRenderer.send('audio-channel', audio)
-              }
-            })
-          })
-        }
-        function decodeCustomMedia(buffer: ArrayBuffer) {
-          // const gain = player.audioContext.createGain()
-          player.audioContext.decodeAudioData(buffer, (ab) => {
-            initAudioWorker((sb) => {
-              // console.log("ab ", ab)
-              //do reasmple to 16000
-              const offlineCtx = new OfflineAudioContext({
-                numberOfChannels: 1,
-                length: ab.duration * 16000,
-                sampleRate: 16000,
-              })
-
-              offlineCtx.oncomplete = (e) => {
-                console.log("offline audio render complete", e)
-              }
-
-              offlineCtx.startRendering().then((rbuf:AudioBuffer) => {
-                console.log("start11 rendering", rbuf)
-                var audio = rbuf.getChannelData(0)
-                console.log("rbuf size", rbuf.length)
-                console.log("audio loaded, size: ", audio.length)
-                ipcRenderer.send('audio-channel', audio)
-              })
-              const audioSrc = offlineCtx.createBufferSource();
-              audioSrc.buffer = ab
-              audioSrc.connect(offlineCtx.destination)
-              audioSrc.start()
-
-              player.video?.duration(ab.duration)
-              player.video?.play()
-              player.audioContext.resume()
-
-              const audioSrcP = player.audioContext.createBufferSource();
-              audioSrcP.buffer = ab
-              sb.connect(player.audioContext.destination)
-              audioSrcP.connect(sb)
-              audioSrcP.start()
-            })
-          }, (err) => {
-            console.log("unable to get audio file", err)
-          })
-        }
-
-        if (mime === 'audio/pcm') {
-          fetchAB('play://' + path, playPCMMedia)
-        } else {
-          fetchAB('play://' + path, decodeCustomMedia)
-        }
-
-      } else {
-        console.log("supported for ", mime)
-        // for those mediasource supported format
-        const srcbuf = mediasrc.addSourceBuffer(mime)
-        srcbuf.onupdateend = () => {
-          console.log("update end")
-          if (!srcbuf.updating && mediasrc.readyState === 'open') {
-            mediasrc.endOfStream()
-          }
-        }
-
-        function decodeForMediaSrc(buffer: ArrayBuffer) {
-          console.log("decode for media source")
-
-          
-
-          srcbuf.appendBuffer(buffer)
-          console.log("after append")
-
-          player.audioContext.decodeAudioData(buffer, (ab: AudioBuffer) => {
-            console.log("audiobuffer", ab)
-            const offlineCtx = new OfflineAudioContext({
-              numberOfChannels: 1,
-              length: ab.duration * 16000,
-              sampleRate: 16000,
-            })
-
-            offlineCtx.oncomplete = (e) => {
-              var audio = e.renderedBuffer.getChannelData(0)
-              console.log("offline audio", audio.length)
-              console.log("asrOn", asrOn)
-              if (asrOn) {
-                ipcRenderer.send('audio-channel', audio)
-              }
-            }
-
-            const audioSrc = offlineCtx.createBufferSource();
-            // audioSrc.buffer?.copyToChannel(ab.getChannelData(0), 0, 0)
-            audioSrc.buffer = ab
-            audioSrc.connect(offlineCtx.destination)
-            audioSrc.start()
-            offlineCtx.startRendering()
-
-          }, (err) => {
-            console.log("unable to get audio file", err)
-          })
-
-        }
-        fetchAB('play://' + path, decodeForMediaSrc)
-      }
+  if (mime === 'audio/pcm') {
+    readAB(path, playPCMMedia)
+  } else {
+    const seq = ++openSeq
+    // Native demuxing covers more than MSE did: wav/flac/mp3 play here but are not MSE-appendable.
+    // ffmime also reports bogus codec lists (audio/x-wav; codecs=0) that video.js refuses, so only
+    // the container type is handed to the element.
+    player.video.one('error', () => {
+      if (seq !== openSeq) return
+      console.log('no native demuxer for', path)
+      readAB(path, playAudioOnly)
     })
-
-    player.video.src({ type: mime, src: URL.createObjectURL(mediasrc)})
-    // videojs.log('player is ready', rplayer);
+    player.video.src({ type: mime.split(';')[0], src: 'play://' + encodeURI(path) })
+    readAB(path, (ab) => extractAudioForAsr(ab, sendToAsr))
   }
 
   player.tracks.forEach((t, i) => {
     player.video?.removeRemoteTextTrack(t)
     player.tracks.splice(i, 1)
   })
-})
+}
+
+function sendToAsr(audio: Float32Array) {
+  console.log("audio loaded, size: ", audio.length)
+  if (asrOn) {
+    ipcRenderer.send('audio-channel', audio)
+  }
+}
+
+// Decode the file's audio track and resample it to the 16 kHz mono the ASR model expects
+function extractAudioForAsr(buffer: ArrayBuffer, cb: (audio: Float32Array) => void) {
+  player.audioContext.decodeAudioData(buffer, (ab) => {
+    resampleTo16k(ab, cb)
+  }, (err) => {
+    console.log("unable to get audio file", err)
+  })
+}
+
+function resampleTo16k(ab: AudioBuffer, cb: (audio: Float32Array) => void) {
+  const offlineCtx = new OfflineAudioContext({
+    numberOfChannels: 1,
+    length: Math.ceil(ab.duration * 16000),
+    sampleRate: 16000,
+  })
+  const audioSrc = offlineCtx.createBufferSource()
+  audioSrc.buffer = ab
+  audioSrc.connect(offlineCtx.destination)
+  audioSrc.start()
+  offlineCtx.startRendering().then((rbuf: AudioBuffer) => {
+    cb(rbuf.getChannelData(0))
+  })
+}
+
+function playPCMMedia(ab: ArrayBuffer) {
+  // Raw 16 kHz mono float32 dump: no container to demux, so it is played straight from samples
+  const pcm = new Float32Array(ab)
+  const buffer = player.audioContext.createBuffer(1, pcm.length, 16000)
+  buffer.getChannelData(0).set(pcm)
+
+  const audioSrc = player.audioContext.createBufferSource()
+  audioSrc.buffer = buffer
+  audioSrc.connect(player.audioContext.destination)
+  audioSrc.start(0)
+  player.audioContext.resume()
+  player.video?.duration(buffer.duration)
+  player.video?.play()
+}
+
+// Audio-only playback through WebAudio, for containers Chromium cannot demux
+function playAudioOnly(buffer: ArrayBuffer) {
+  player.audioContext.decodeAudioData(buffer, (ab) => {
+    const audioSrc = player.audioContext.createBufferSource()
+    audioSrc.buffer = ab
+    audioSrc.connect(player.audioContext.destination)
+    audioSrc.start()
+    player.audioContext.resume()
+    player.video?.duration(ab.duration)
+    player.video?.play()
+
+    resampleTo16k(ab, sendToAsr)
+  }, (err) => {
+    console.log("unable to get audio file", err)
+  })
+}
 
 ipcRenderer.on('subtitle-open', (event, { path }) => {
   const vttpath = encodeURI("play://" + path)
