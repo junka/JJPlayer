@@ -2,7 +2,8 @@ import { app, session, BrowserWindow, nativeImage, ipcMain, dialog, protocol, Me
 import { release } from 'node:os'
 import { join, basename } from 'node:path'
 import { update } from './update'
-import { getTemplate, show_open_dialog, gwhisper, whisperInit} from '../menu/menu'
+import { getTemplate, show_open_dialog } from '../menu/menu'
+import { asrStart, asrStop, asrTranscribe } from '../asr/host'
 import { i18n } from '../i18n/i18n'
 import * as fs from 'node:fs'
 // import { createFFmpeg } from '@ffmpeg/ffmpeg'
@@ -102,8 +103,8 @@ app.on('ready', async () => {
     callback({ cancel: false, responseHeaders });
   });
 
-  whisperInit()
-  win?.webContents.send('whisper-change', { data: true })
+  asrStart()
+  win?.webContents.send('asr-change', { data: true })
 
   protocol.registerFileProtocol('play', (request, callback) => {
     const url = request.url.substr(7)
@@ -136,18 +137,18 @@ app.on('ready', async () => {
   tray.setContextMenu(contextMenu)
   tray.setToolTip('JJPlayer')
 
-  const usefile = "/Users/admin/proj/github/mmp/mpp/test.mp4"
-  var mimeCodec = await GetMimeCodecs(usefile)
-  // const mimeType = "video/mp4; codecs=\"avc1.640029, mp4a.40.2\""
-  if (mimeCodec.startsWith("video/x-matroska")) {
-    mimeCodec = mimeCodec.replace("video/x-matroska", "video/mp4")
-  } else if (mimeCodec.startsWith("video/quicktime")) {
-    mimeCodec = mimeCodec.replace("video/quicktime", "video/mp4")
-  }
-  win?.webContents.once('did-finish-load', ()=> {
-    console.log("mime", mimeCodec)
-    win?.webContents.send('file-selected', { path: usefile, mime: mimeCodec });
-  })
+  // TODO: remove hardcoded test file path
+  // const usefile = "/Users/admin/proj/github/mmp/mpp/test.mp4"
+  // var mimeCodec = await GetMimeCodecs(usefile)
+  // if (mimeCodec.startsWith("video/x-matroska")) {
+  //   mimeCodec = mimeCodec.replace("video/x-matroska", "video/mp4")
+  // } else if (mimeCodec.startsWith("video/quicktime")) {
+  //   mimeCodec = mimeCodec.replace("video/quicktime", "video/mp4")
+  // }
+  // win?.webContents.once('did-finish-load', ()=> {
+  //   console.log("mime", mimeCodec)
+  //   win?.webContents.send('file-selected', { path: usefile, mime: mimeCodec });
+  // })
 })
 
 // app.whenReady().then(createWindow)
@@ -155,7 +156,7 @@ app.on('ready', async () => {
 app.on('window-all-closed', () => {
   win = null
   if (process.platform !== 'darwin') app.quit()
-  gwhisper?.free()
+  asrStop()
 })
 
 app.on('second-instance', () => {
@@ -175,13 +176,6 @@ app.on('activate', () => {
   }
 })
 
-function transASR(pcm: Float32Array, translate: Boolean) {
-  const ret = gwhisper?.full_default(pcm, "en", translate)
-  if (ret !== 0) {
-    console.log("fail to transcribe")
-  }
-}
-
 // MacOS open recent events
 app.on('open-file', async (event, path) => {
   event.preventDefault()
@@ -194,23 +188,8 @@ app.on('open-file', async (event, path) => {
   }
   win?.webContents.send('file-selected', { path: path, mime: mimeCodec })
   if (mimeCodec == 'audio/pcm') {
-    const data = fs.readFileSync(path)
-    const pcm = new Float32Array(data.buffer)
-    console.log(pcm)
-    const duration = pcm.length/16000
-    var round = 0
-    console.log("duration is ", duration)
-    //every round 5 seconds audio will take 6 seconds to process
-    while (duration > 5 * (round + 1)) {
-      console.log("round start at ", (new Date().getTime()) / 1000)
-      var end = 16000 * 5 * (round + 1) - 1
-      if (duration < 5 * (round + 1)) {
-        end = 16000 * duration - 1
-      }
-      transASR(pcm.slice(16000 * 5 *round, end), false)
-      round = round + 1
-      console.log("round end at", (new Date().getTime()) / 1000)
-    }
+    const pcm = new Float32Array(fs.readFileSync(path).buffer)
+    asrTranscribe(pcm)
   }
 })
 
@@ -267,6 +246,5 @@ ipcMain.on('play-status', (e, value) => {
 })
 
 ipcMain.on('audio-channel', (event, data: Float32Array) => {
-  console.log("channel data", data.length)
-  // transASR(data, false)
+  asrTranscribe(data, 16000)
 });

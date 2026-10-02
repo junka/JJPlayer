@@ -28,6 +28,10 @@ release
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
+
+# downloaded by download-models.sh
+/public/models/
 /test-results/
 /playwright-report/
 /playwright/.cache/
+/e2e/screenshots/

@@ -3,57 +3,9 @@ import { update } from '../main/update'
 import { basename } from 'node:path'
 import { i18n } from '../i18n/i18n'
 import { win } from '../main'
-import * as fs from 'node:fs'
-import { whisper_factory } from '../whisper/whisper'
+import { asrToggle } from '../asr/host'
 import { GetMimeCodecs } from 'ffmime'
 
-
-let whiperMod: string = ''
-
-export var gwhisper: any = null
-export function whisperInit() {
-    whiperMod = process.env.PUBLIC + "/ggml-model-whisper-tiny.bin"
-    if (gwhisper === null) {
-        whisper_factory({
-            print : (e: any) => {
-                const span = e.match(/\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}/)
-                if (span !== null) {
-                    const text = span[0] +'\n-' + e.slice(e.indexOf(span[0]) + span[0].length + 1) + '\n'
-                    console.log("right:", e)
-                    win?.webContents.send('subtitle-txt', { subtitle: text })
-                }
-            },
-            printErr: (e: any) => {
-                //this override could depress init logging
-            }
-        }).then((whisper: any) => {
-            const modname = 'whisper.bin'
-            const data = fs.readFileSync(whiperMod)
-            try {
-                whisper.FS_unlink(modname)
-            } catch (e) {
-            }
-            whisper.FS_createDataFile("/", modname, data, true, true)
-            const ret = whisper.init(modname)
-            if (ret == false) {
-                console.log("fail to init whisper, exit")
-                process.exit(1)
-            }
-            
-            gwhisper = whisper
-        }).catch((e: any) => {
-            console.log(e)
-        })
-    }
-}
-
-function whisperUninit() {
-    console.log(gwhisper)
-    if (gwhisper) {
-        gwhisper.free()
-        gwhisper = null
-    }
-}
 
 function show_about_dialog() {
     dialog.showMessageBox({
@@ -114,7 +66,7 @@ function show_subtitle_dialog() {
 function show_export_subtitle_dialog() {
     dialog.showSaveDialog({
         title: i18n.__('Save'),
-        defaultPath: '~/Downloads/whisper.vtt',
+        defaultPath: '~/Downloads/subtitles.vtt',
         filters: [
             { name: 'Subtitle Files', extensions: ['vtt'] },
         ],
@@ -217,45 +169,18 @@ export const getTemplate = (): Array<MenuItemConstructorOptions | MenuItem> => {
                             }
                         },
                         {
-                            label: "Whisper",
+                            label: "Auto Subtitle",
                             submenu: [
                                 {
                                     label: "Toggle",
                                     click: () => {
-                                        if (gwhisper === null) {
-                                            whisperInit()
-                                            win?.webContents.send('whisper-change', {data: true})
-                                        } else {
-                                            whisperUninit()
-                                            win?.webContents.send('whisper-change', { data: false })
-                                        }
+                                        win?.webContents.send('asr-change', { data: asrToggle() })
                                     }
                                 },
                                 {
-                                    label: "export whisper",
+                                    label: "export subtitles",
                                     click: () => {
                                         show_export_subtitle_dialog()
-                                    }
-                                },
-                                {
-                                    label: "set model binary",
-                                    click: () => {
-                                        dialog.showOpenDialog({
-                                            title: i18n.__('Select model binary file'),
-                                            defaultPath: '~/Downloads',
-                                            filters: [
-                                                { name: 'Model Files', extensions: ['bin'] },
-                                            ],
-                                            properties: ['openFile', 'multiSelections'],
-                                        }).then(result => {
-                                            if (!result.canceled) {
-                                                win?.setTitle(basename(result.filePaths[0]))
-                                                console.log(result.filePaths[0])
-                                                whiperMod = result.filePaths[0]
-                                            }
-                                        }).catch(err => {
-                                            console.log(err)
-                                        })
                                     }
                                 }
                             ]

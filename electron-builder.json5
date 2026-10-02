@@ -11,6 +11,11 @@
     "dist-electron",
     "dist"
   ],
+  "asarUnpack": [
+    "dist-electron/main/worker.js",
+    "**/*.wasm",
+    "**/models/**"
+  ],
   "mac": {
     "artifactName": "${productName}_${version}.${ext}",
     "target": [

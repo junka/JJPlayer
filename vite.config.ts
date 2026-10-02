@@ -64,20 +64,8 @@ export default defineConfig(({ command }) => {
           },
         }, 
         {
-          entry: 'electron/whisper/libwhisper.worker.js',
-          vite: {
-            build: {
-              sourcemap,
-              minify: isBuild,
-              outDir: 'dist-electron/main',
-              rollupOptions: {
-                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
-              },
-            },
-          },
-        },
-        {
-          entry: 'electron/whisper/whisper.js',
+          // Auto-subtitle engine, forked as an Electron utilityProcess
+          entry: 'electron/asr/worker.ts',
           vite: {
             build: {
               sourcemap,
@@ -93,7 +81,8 @@ export default defineConfig(({ command }) => {
       // Use Node.js API in the Renderer-process
       renderer(),
     ],
-    server: process.env.VSCODE_DEBUG && (() => {
+    server: (() => {
+      if (!process.env.VSCODE_DEBUG) return undefined
       const url = new URL(pkg.debug.env.VITE_DEV_SERVER_URL)
       return {
         host: url.hostname,
@@ -101,6 +90,5 @@ export default defineConfig(({ command }) => {
       }
     })(),
     clearScreen: false,
-    nodeArgs: process.env.JS_FLAGS
   }
 })

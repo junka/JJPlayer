@@ -8,11 +8,11 @@ import {SharedBufferWorkletNode} from './audioworker-node'
 
 declare type Player = ReturnType<typeof videojs>
 
-let whisper = true
+let asrOn = true
 
-let whispervtt : string = 'WEBVTT\n\n'
+let subtitlevtt : string = 'WEBVTT\n\n'
 
-let whispertrack: any = null
+let autotrack: any = null
 let lastplayfile: any = null
 
 declare global {
@@ -218,7 +218,7 @@ function fetchAB(url: string, callback: Function) {
 
 ipcRenderer.on('file-selected', (event, { path, mime }) => {
   if (lastplayfile !== path) {
-    whispervtt = 'WEBVTT\n\n'
+    subtitlevtt = 'WEBVTT\n\n'
     lastplayfile = path
   }
   console.log('file selected', mime, MediaSource.isTypeSupported(mime))
@@ -266,7 +266,7 @@ ipcRenderer.on('file-selected', (event, { path, mime }) => {
               var audio = rbuf.getChannelData(0)
               console.log("rbuf size", rbuf.length)
               console.log("audio loaded, size: ", audio.length)
-              if (whisper) {
+              if (asrOn) {
                 ipcRenderer.send('audio-channel', audio)
               }
             })
@@ -351,8 +351,8 @@ ipcRenderer.on('file-selected', (event, { path, mime }) => {
             offlineCtx.oncomplete = (e) => {
               var audio = e.renderedBuffer.getChannelData(0)
               console.log("offline audio", audio.length)
-              console.log("whisper", whisper)
-              if (whisper) {
+              console.log("asrOn", asrOn)
+              if (asrOn) {
                 ipcRenderer.send('audio-channel', audio)
               }
             }
@@ -399,20 +399,20 @@ ipcRenderer.on('subtitle-open', (event, { path }) => {
 
 ipcRenderer.on('subtitle-save', (e, {path}) => {
   console.log('write file to ', path)
-  if (whisper && whispertrack !== null) {
-    fs.writeFile(path, whispervtt, 'utf-8', (err)=>{})
+  if (asrOn && autotrack !== null) {
+    fs.writeFile(path, subtitlevtt, 'utf-8', (err)=>{})
   }
 })
 
-ipcRenderer.on('whisper-change', (event, {data}) => {
-  console.log('whisper changed', data)
-  whisper = data
-  if (whisper == false && whispertrack !== null) {
+ipcRenderer.on('asr-change', (event, {data}) => {
+  console.log('auto subtitle changed', data)
+  asrOn = data
+  if (asrOn == false && autotrack !== null) {
     player.tracks.forEach((t, i) => {
-      if (t == whispertrack) {
+      if (t == autotrack) {
         player.video?.removeRemoteTextTrack(t)
         player.tracks.splice(i, 1)
-        whispertrack = null
+        autotrack = null
       }
     })
   }
@@ -420,28 +420,28 @@ ipcRenderer.on('whisper-change', (event, {data}) => {
 
 ipcRenderer.on('subtitle-txt', (event, {subtitle}) => {
   console.log('sub:', subtitle)
-  if (whisper) {
-    whispervtt += subtitle+'\n\n'
-    const blob = new Blob([whispervtt], { type: 'text/vtt' })
+  if (asrOn) {
+    subtitlevtt += subtitle+'\n\n'
+    const blob = new Blob([subtitlevtt], { type: 'text/vtt' })
     const vttpath = URL.createObjectURL(blob)
-    if (whispertrack !== null) {
+    if (autotrack !== null) {
       player.tracks.forEach((t, i) => {
-        if (t == whispertrack) {
+        if (t == autotrack) {
           player.video?.removeRemoteTextTrack(t)
           player.tracks.splice(i, 1)
-          whispertrack = null
+          autotrack = null
         }
       })
     }
-    if (whispertrack === null) {
-        whispertrack = player.video?.addRemoteTextTrack({
+    if (autotrack === null) {
+        autotrack = player.video?.addRemoteTextTrack({
           kind: 'captions',
           label: 'en',
           language: "English",
           mode: "showing",
           src: vttpath,
         })
-        player.tracks.push(whispertrack as any)
+        player.tracks.push(autotrack as any)
     }
   }
 })
