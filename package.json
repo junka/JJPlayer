@@ -20,8 +20,6 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",
-    "@types/dom-webcodecs": "^0.1.19",
-    "@types/video.js": "^7.3.58",
     "electron-updater": "^6.8.9",
     "ffmime": "^1.0.8",
     "llama-tokenizer-js": "^1.2.2",
@@ -32,9 +30,11 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@types/audioworklet": "^0.0.100",
+    "@types/dom-webcodecs": "^0.1.19",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
+    "@types/video.js": "^7.3.58",
+    "@vitejs/plugin-react": "^6.1.2",
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3",
     "react": "^19.3.0",
@@ -42,7 +42,7 @@
     "rollup-plugin-copy": "^3.5.0",
     "sass": "^1.105.1",
     "typescript": "^7.0.2",
-    "vite": "^8.3.1",
+    "vite": "^8.3.3",
     "vite-plugin-electron": "^1.1.2",
     "vite-plugin-electron-renderer": "^1.0.0"
   },
