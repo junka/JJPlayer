@@ -5,7 +5,19 @@ import {
   autoUpdater
 } from 'electron-updater'
 
+// createWindow runs a second time on macOS 'activate' after the last window closes, so the handlers
+// and updater listeners are installed once; only the window that receives events is refreshed.
+let target: Electron.BrowserWindow | null = null
+let installed = false
+
 export function update(win: Electron.BrowserWindow) {
+  target = win
+  if (installed) return
+  installed = true
+
+  const send = (channel: string, payload?: unknown) => {
+    if (target && !target.isDestroyed()) target.webContents.send(channel, payload)
+  }
 
   // When set to false, the update download will be triggered through the API
   autoUpdater.autoDownload = false
@@ -16,11 +28,11 @@ export function update(win: Electron.BrowserWindow) {
   autoUpdater.on('checking-for-update', function () { })
   // update available
   autoUpdater.on('update-available', (arg) => {
-    win.webContents.send('update-can-available', { update: true, version: app.getVersion(), newVersion: arg?.version })
+    send('update-can-available', { update: true, version: app.getVersion(), newVersion: arg?.version })
   })
   // update not available
   autoUpdater.on('update-not-available', (arg) => {
-    win.webContents.send('update-can-available', { update: false, version: app.getVersion(), newVersion: arg?.version })
+    send('update-can-available', { update: false, version: app.getVersion(), newVersion: arg?.version })
   })
 
   // Checking for updates
