@@ -14,7 +14,11 @@
   "asarUnpack": [
     "dist-electron/main/worker.js",
     "**/*.wasm",
-    "**/models/**"
+    "**/models/**",
+    // The worker is forked from a real path, so it lives outside the asar — and a require from the
+    // unpacked tree only resolves inside app.asar.unpacked. Its closure (transformers,
+    // onnxruntime-node, sharp, ...) is unpacked wholesale instead of enumerating 41 packages.
+    "**/node_modules/**"
   ],
   "mac": {
     "artifactName": "${productName}_${version}.${ext}",
