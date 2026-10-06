@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 // import copy from 'rollup-plugin-copy'
-import pkg from './package.json'
+import pkg from './package.json' with { type: 'json' }
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
@@ -18,7 +18,7 @@ export default defineConfig(({ command }) => {
   return {
     resolve: {
       alias: {
-        '@': path.join(__dirname, 'src')
+        '@': path.join(import.meta.dirname, 'src')
       },
     },
     plugins: [
