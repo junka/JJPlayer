@@ -1,10 +1,8 @@
-import { dialog, shell, nativeTheme, app, MenuItemConstructorOptions, MenuItem } from 'electron'
+import { dialog, shell, nativeTheme, MenuItemConstructorOptions, MenuItem } from 'electron'
 import { update } from '../main/update'
-import { basename } from 'node:path'
 import { i18n } from '../i18n/i18n'
-import { win } from '../main'
+import { win, openMediaFile } from '../main'
 import { asrToggle } from '../asr/host'
-import { GetMimeCodecs } from 'ffmime'
 
 
 function show_about_dialog() {
@@ -28,18 +26,7 @@ export function show_open_dialog() {
         properties: ['openFile'],
     }).then(result => {
         if (!result.canceled) {
-            win?.setTitle(basename(result.filePaths[0]))
-            console.log(result.filePaths[0])
-            GetMimeCodecs(result.filePaths[0]).then((mimeCodec: string) => {
-                console.log(mimeCodec)
-                if (mimeCodec.startsWith("video/x-matroska")) {
-                    mimeCodec = mimeCodec.replace("video/x-matroska", "video/mp4")
-                } else if (mimeCodec.startsWith("video/quicktime")) {
-                    mimeCodec = mimeCodec.replace("video/quicktime", "video/mp4")
-                }
-                win?.webContents.send('file-selected', { path: result.filePaths[0], mime: mimeCodec })
-                app.addRecentDocument(result.filePaths[0])
-            })
+            openMediaFile(result.filePaths[0])
         }
     }).catch(err => {
         console.log(err)
